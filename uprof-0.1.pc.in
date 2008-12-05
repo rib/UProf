@@ -1,0 +1,16 @@
+prefix=@prefix@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+majorversion=@UPROF_MAJOR_VERSION@
+minorversion=@UPROF_MINOR_VERSION@
+microversion=@UPROF_MICRO_VERSION@
+apiversion=@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@
+
+Name: UProf
+Description: Userspace Profiling Toolkit
+Version: @VERSION@
+Libs: -L${libdir} -luprof-${apiversion}
+Cflags: -I${includedir}/uprof-${apiversion}
+Requires: @UPROF_PKG_REQUIRES@
+

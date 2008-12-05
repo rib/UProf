@@ -1,0 +1,225 @@
+dnl Process this file with autoconf to produce a configure script.
+
+AC_PREREQ(2.59)
+
+dnl ================================================================
+dnl Package version (i.e. the pretty number that users see)
+dnl ================================================================
+m4_define([uprof_major_version], [0])
+m4_define([uprof_minor_version], [1])
+m4_define([uprof_micro_version], [0])
+m4_define([uprof_version],
+          [uprof_major_version.uprof_minor_version.uprof_micro_version])
+
+dnl ================================================================
+dnl Interface version details for libtool
+dnl ================================================================
+# NB: I didn't copy the widely used glib/gtk style of dealing with libtool
+# versioning since I found the different (compared to libtool's documentation)
+# ideas for what the interface age should represent; and the addition of a
+# binary age confusing. I couldn't find any documentation/mailing list archives
+# etc explaing the ideas nor any code that makes use of those values. They also
+# seem to go against the advice of not basing the libtool versioning on package
+# versioning.
+#
+# For reference on how the various numbers should be updated at release time
+# these rules are adapted from the libtool info pages:
+#
+#  1. Update the version information only immediately before a public
+#     release of your software.
+#
+#  2. If the library source code has changed at all since the last
+#     update, then increment REVISION (`C:R:A' becomes `C:r+1:A').
+#
+#  3. If any interfaces have been added, removed, or changed since the
+#     last update, increment CURRENT, and set REVISION to 0.
+#
+#  4. If any interfaces have been added since the last public release,
+#     then increment AGE.
+#
+#  5. If any interfaces have been removed since the last public release,
+#     then set AGE to 0.
+m4_define([uprof_lt_current], 0)
+m4_define([uprof_lt_revision], 0)
+m4_define([uprof_lt_age], 0)
+# We do also tell libtool the pretty version also:
+m4_define([uprof_lt_release], [uprof_version])
+
+AC_INIT(uprof,  [uprof_version])
+AC_CONFIG_SRCDIR(src/uprof.c)
+AC_CONFIG_MACRO_DIR([m4])
+AC_CONFIG_HEADERS(config.h)
+AM_INIT_AUTOMAKE([gnu])
+
+
+dnl ================================================================
+dnl More version number stuff
+dnl ================================================================
+UPROF_MAJOR_VERSION=uprof_major_version
+UPROF_MINOR_VERSION=uprof_minor_version
+UPROF_MICRO_VERSION=uprof_micro_version
+UPROF_VERSION=uprof_version
+
+AC_SUBST(UPROF_MAJOR_VERSION)
+AC_SUBST(UPROF_MINOR_VERSION)
+AC_SUBST(UPROF_MICRO_VERSION)
+AC_SUBST(UPROF_VERSION)
+
+
+dnl ================================================================
+dnl libtool versioning
+dnl ================================================================
+UPROF_LT_CURRENT=uprof_lt_current
+UPROF_LT_REVISION=uprof_lt_revision
+UPROF_LT_AGE=uprof_lt_age
+UPROF_LT_RELEASE=uprof_lt_release
+AC_SUBST(UPROF_LT_CURRENT)
+AC_SUBST(UPROF_LT_REVISION)
+AC_SUBST(UPROF_LT_AGE)
+AC_SUBST(UPROF_LT_RELEASE)
+
+AM_MAINTAINER_MODE
+
+
+dnl ================================================================
+dnl Handle extra configure options
+dnl ================================================================
+
+AC_ARG_ENABLE(debug,
+  AC_HELP_STRING([--enable-debug],
+    [enable debuging messages]),
+  [
+   if test $enableval = yes; then 
+
+     AC_DEFINE(_DEBUG, 1, "define to enable debuging")
+
+     dnl (This is for removing the default -O2 not adding -g)
+     CFLAGS="-g -O0"
+     EXTRA_CFLAGS="-Wall -Werror"
+     SILENT="#"
+   else
+    if test -z $CFLAGS; then
+     CFLAGS="-g -O2"
+    fi
+     SILENT=".SILENT"
+   fi
+  ],
+  [
+   if test -z $CFLAGS; then
+        CFLAGS="-g -O2"
+   fi
+   SILENT=".SILENT"
+  ])
+
+
+AC_ARG_ENABLE(werror,
+  AC_HELP_STRING([--enable-werror],
+    [Use -Werror option for compilation]),
+  [
+      if test $enableval = yes; then 
+         EXTRA_CFLAGS="-Wall -Werror"
+      else
+         EXTRA_CFLAGS="-Wall"
+      fi
+  ], 
+  [
+   if test -z $EXTRA_CFLAGS; then
+      EXTRA_CFLAGS="-Wall"
+   fi
+  ])
+
+AC_ARG_ENABLE(uninstalled-build,
+              AC_HELP_STRING([--enable-uninstalled-build],
+			     [Search for files in build directory as well]),
+	      enable_uninstalled=yes,)
+if test x"$enable_uninstalled" = xyes; then
+	AC_DEFINE_UNQUOTED(
+        SHARE_UNINSTALLED_DIR,"`pwd`/src/data",[path to source data dir])
+fi
+
+
+dnl ================================================================
+dnl Compiler stuff.
+dnl ================================================================
+AM_PROG_CC_C_O
+AC_ISC_POSIX
+AC_C_CONST
+
+
+dnl ================================================================
+dnl Libtool stuff.
+dnl ================================================================
+AC_PROG_LIBTOOL
+LIBTOOL="$LIBTOOL --preserve-dup-deps"
+
+
+dnl ================================================================
+dnl I18n stuff.
+dnl ================================================================
+dnl AC_PROG_INTLTOOL([0.23])
+dnl GETTEXT_PACKAGE=uprof
+dnl AC_SUBST(GETTEXT_PACKAGE)
+dnl AC_SUBST([CONFIG_STATUS_DEPENDENCIES],['$(top_srcdir)/po/LINGUAS'])
+dnl AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE,"$GETTEXT_PACKAGE", [Gettext package])
+dnl ALL_LINGUAS="`cat "$srcdir/po/LINGUAS" | grep -v '^#'`"
+dnl uproflocaledir='${prefix}/${DATADIRNAME}/locale'
+dnl AC_SUBST(uproflocaledir)
+dnl AM_GLIB_GNU_GETTEXT
+
+
+dnl ================================================================
+dnl Documentation stuff.
+dnl ================================================================
+GTK_DOC_CHECK(1.4)
+GNOME_DOC_INIT
+
+
+dnl ================================================================
+dnl Check for dependency packages.
+dnl ================================================================
+%PROGRAM_NAME_UC%_PKG_REQUIRES="glib-2.0"
+AC_SUBST(%PROGRAM_NAME_UC%_PKG_REQUIRES)
+PKG_CHECK_MODULES(%PROGRAM_NAME_UC%_DEP, [$%PROGRAM_NAME_UC%_PKG_REQUIRES])
+
+
+dnl ================================================================
+dnl Misc program dependencies.
+dnl ================================================================
+AC_PATH_PROG(GLIB_GENMARSHAL, glib-genmarshal)
+AC_PROG_INSTALL
+
+
+dnl ================================================================
+dnl Checks for header files.
+dnl ================================================================
+AC_PATH_X
+AC_HEADER_STDC
+AC_CHECK_HEADERS(fcntl.h limits.h unistd.h signal.h)
+
+
+dnl ================================================================
+dnl Checks for library functions.
+dnl ================================================================
+AC_TYPE_SIGNAL
+AC_CHECK_FUNCS(putenv strdup)
+
+
+dnl ================================================================
+dnl What needs to be substituted in other files
+dnl ================================================================
+AC_SUBST(EXTRA_CFLAGS)
+AC_SUBST(EXTRA_CPPFLAGS)
+AC_SUBST(UPROF_DEP_CFLAGS)
+AC_SUBST(UPROF_DEP_LIBS)
+
+
+dnl ================================================================
+dnl Dah Da!
+dnl ================================================================
+AC_OUTPUT(
+Makefile 
+src/Makefile
+dnl po/Makefile.in
+dnl uprof-0.1.pc
+)
+
