@@ -1,4 +1,4 @@
-SUBDIRS = src
+SUBDIRS = uprof
 #SUBDIRS += doc
 
 

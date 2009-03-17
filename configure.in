@@ -46,7 +46,7 @@ m4_define([uprof_lt_age], 0)
 m4_define([uprof_lt_release], [uprof_version])
 
 AC_INIT(uprof,  [uprof_version])
-AC_CONFIG_SRCDIR(src/uprof.c)
+AC_CONFIG_SRCDIR(uprof/uprof.c)
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([gnu])
@@ -177,9 +177,9 @@ GNOME_DOC_INIT
 dnl ================================================================
 dnl Check for dependency packages.
 dnl ================================================================
-%PROGRAM_NAME_UC%_PKG_REQUIRES="glib-2.0"
-AC_SUBST(%PROGRAM_NAME_UC%_PKG_REQUIRES)
-PKG_CHECK_MODULES(%PROGRAM_NAME_UC%_DEP, [$%PROGRAM_NAME_UC%_PKG_REQUIRES])
+UPROF_PKG_REQUIRES="glib-2.0"
+AC_SUBST(UPROF_PKG_REQUIRES)
+PKG_CHECK_MODULES(UPROF_DEP, [$UPROF_PKG_REQUIRES])
 
 
 dnl ================================================================
@@ -218,7 +218,7 @@ dnl Dah Da!
 dnl ================================================================
 AC_OUTPUT(
 Makefile 
-src/Makefile
+uprof/Makefile
 dnl po/Makefile.in
 dnl uprof-0.1.pc
 )

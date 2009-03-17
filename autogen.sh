@@ -8,8 +8,8 @@ PKG_NAME=uprof
 
 (test -f $srcdir/configure.in \
   && test -f $srcdir/autogen.sh \
-  && test -d $srcdir/src \
-  && test -f $srcdir/src/uprof.c) || {
+  && test -d $srcdir/uprof \
+  && test -f $srcdir/uprof/uprof.c) || {
     echo -n "**Error**: Directory \"$srcdir\" does not look like the"
     echo " top-level $PKG_NAME directory"
     exit 1

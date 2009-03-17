@@ -12,86 +12,28 @@
  * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
  * FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
  * more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public License
  * along with UProf.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#include <uprof.h>
 
 #include <stdio.h>
 #include <stdint.h>
 #include <time.h>
 #include <glib.h>
+#include <errno.h>
 
 #define DEBUG g_print
 
-typedef struct _UProfContext
+struct _UProfContext
 {
   guint ref;
-} UProfContext;
 
-typedef struct _UProfCounter
-{
-  char *name;
-
-  /** private */
-  guint count;
-
-} UProfCounter;
-
-#if 0
-typedef struct _UProfTimingProbeAction
-{
-  UPROF_TIMING_PROBE_ACTION_START,
-  UPROF_TIMING_PROBE_ACTION_CONTINUE,
-  UPROF_TIMING_PROBE_ACTION_STOP
-} UProfTimingProbeAction;
-
-typedef struct _UProfTimingProbeEndPoint
-{
-  UProfTimingProbeLeader *leader;
-} UProfTimingProbeEndPoint;
-#endif
-
-typedef struct _UProfTimer
-{
-  //UProfTimingProbeAction action;
-
-  /* Application defined name for timer */
-  char *name;
-  
-  /* Application defined grouping */
-  guint group;
-
-  /* 0 is highest priority */
-  guint priority;
-
-#if 0
-  /* To allow */
-  struct _UProfTimingProbe *continue_from;
-#endif
-
-  /** private */
-
-  GList *intermediate_probes;
-  
-  GArray samples;
-  guint n_samples;
-  
-  unsigned long long start_time;
-  unsigned long long running_total;
-
-  guint running:1;
-
-} UProfTimer;
-
-/* An intermediate probe is used for taking samples between the start and
- * stop points of a UProfTimer. */
-typedef struct _UProfIntermediateTimerProbe
-{
-  char *name;
-  guint priority;
-  unsigned long long probe_time;
-} UProfIntermediateTimerProbe;
+  UProfCounter  *counters;
+  UProfTimer	*timers;
+};
 
 typedef struct _RDTSCVal
 {
@@ -113,9 +55,9 @@ uprof_query_system_counter (void)
 #if __i386__
   RDTSCVal rdtsc;
 
-  /* XXX: 
+  /* XXX:
    * Consider that on some multi processor machines it may be necissary to set
-   * processor affinity. 
+   * processor affinity.
    *
    * For Core 2 Duo, or hyper threaded systems, then as I understand it the
    * rdtsc is driven by the system bus, and so the value is synchronized
@@ -181,7 +123,7 @@ uprof_init (int *argc, char ***argv)
   system_counter_hz = diff * 4;
 
   DEBUG ("time0: %llu\n", time0);
-  DEBUG (" <sleep for 1/4 second>\n", time0);
+  DEBUG (" <sleep for 1/4 second>\n");
   DEBUG ("time1: %llu\n", time1);
   DEBUG ("Diff over 1/4 second: %llu\n", diff);
   DEBUG ("System Counter HZ: %llu\n", system_counter_hz);
@@ -218,17 +160,29 @@ uprof_context_unref (UProfContext *context)
 }
 
 void
-uprof_context_declare_counters (UProfContext *context, const UProfCounter *counters)
+uprof_context_declare_counters (UProfContext *context, UProfCounter *counters)
 {
-  g_free (context->conters);
+  int i;
 
-  context->counter = g_new0 (UProfCounter, n_counters);
+  context->counters = counters;
+  for (i = 0; counters[i].name != NULL; i++)
+    {
+      counters[i].count = 0;
+    }
 }
 
 void
-uprof_context_declare_timers (context, UProfTimer *timers)
+uprof_context_declare_timers (UProfContext *context, UProfTimer *timers)
 {
+  int i;
 
+  context->timers = timers;
+  for (i = 0; timers[i].name != NULL; i++)
+    {
+      timers[i].count = 0;
+      timers[i].start = 0;
+      timers[i].total = 0;
+    }
 }
 
 void
@@ -245,7 +199,7 @@ uprof_get_report (UProfContext *context)
  * Should support summing the total time spent between start/stop delimiters
  * Should support heirachical timers; such that more fine grained timers
  * may be be easily enabled/disabled.
- * 
+ *
  * Reports should support XML
  * Implement a simple clutter app for visualising the stats.
  */
