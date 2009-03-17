@@ -84,6 +84,20 @@ void
 uprof_init (int *argc, char ***argv);
 
 /**
+ * uprof_get_system_counter:
+ * FIXME
+ */
+unsigned long long
+uprof_get_system_counter (void);
+
+/**
+ * uprof_get_system_counter_hz:
+ * FIXME
+ */
+unsigned long long
+uprof_get_system_counter_hz (void);
+
+/**
  * uprof_context_new:
  * @name: The top most name to categorize your profiling results
  *
@@ -113,13 +127,6 @@ uprof_context_ref (UProfContext *context);
  */
 void
 uprof_context_unref (UProfContext *context);
-
-/**
- * uprof_get_system_counter:
- * FIXME
- */
-unsigned long long
-uprof_get_system_counter (void);
 
 /**
  * uprof_context_add_counter:
@@ -284,6 +291,10 @@ uprof_context_output_report (UProfContext *context);
  * - Being able to report timer stats in relation to a counter (such as
  *   a frame counter). For example reporting the average time spent
  *   painting, per frame.
+ */
+
+/* XXX: static globals shouldn't be the only way to declare timers and
+ * counters; exported globals or malloc'd variables might be handy too.
  */
 
 #endif /* _UPROF_H_ */

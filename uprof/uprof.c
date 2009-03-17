@@ -47,39 +47,7 @@ typedef struct _RDTSCVal
   } u;
 } RDTSCVal;
 
-unsigned long long system_counter_hz;
-
-
-unsigned long long
-uprof_get_system_counter (void)
-{
-#if __i386__
-  RDTSCVal rdtsc;
-
-  /* XXX:
-   * Consider that on some multi processor machines it may be necissary to set
-   * processor affinity.
-   *
-   * For Core 2 Duo, or hyper threaded systems, then as I understand it the
-   * rdtsc is driven by the system bus, and so the value is synchronized
-   * accross logical cores so we don't need to worry about affinity.
-   *
-   * Also since rdtsc is driven by the system bus, unlike the "Non-Sleep Clock
-   * Ticks" counter it isn't affected by the processor going into power saving
-   * states, which may happen as the processor goes idle waiting for IO.
-   */
-
-  asm ("rdtsc; movl %%edx,%0; movl %%eax,%1"
-       : "=r" (rdtsc.u.split.hi), "=r" (rdtsc.u.split.low)
-       : /* input */
-       : "%edx", "%eax");
-
-  return rdtsc.u.full_value;
-#else
-  /* XXX: implement gettimeofday() based fallback */
-#error "System currently not supported by uprof"
-#endif
-}
+static unsigned long long system_counter_hz;
 
 void
 uprof_init (int *argc, char ***argv)
@@ -125,6 +93,37 @@ uprof_init (int *argc, char ***argv)
   DEBUG ("time1: %llu\n", time1);
   DEBUG ("Diff over 1/4 second: %llu\n", diff);
   DEBUG ("System Counter HZ: %llu\n", system_counter_hz);
+}
+
+unsigned long long
+uprof_get_system_counter (void)
+{
+#if __i386__
+  RDTSCVal rdtsc;
+
+  /* XXX:
+   * Consider that on some multi processor machines it may be necissary to set
+   * processor affinity.
+   *
+   * For Core 2 Duo, or hyper threaded systems, then as I understand it the
+   * rdtsc is driven by the system bus, and so the value is synchronized
+   * accross logical cores so we don't need to worry about affinity.
+   *
+   * Also since rdtsc is driven by the system bus, unlike the "Non-Sleep Clock
+   * Ticks" counter it isn't affected by the processor going into power saving
+   * states, which may happen as the processor goes idle waiting for IO.
+   */
+
+  asm ("rdtsc; movl %%edx,%0; movl %%eax,%1"
+       : "=r" (rdtsc.u.split.hi), "=r" (rdtsc.u.split.low)
+       : /* input */
+       : "%edx", "%eax");
+
+  return rdtsc.u.full_value;
+#else
+  /* XXX: implement gettimeofday() based fallback */
+#error "System currently not supported by uprof"
+#endif
 }
 
 unsigned long long
