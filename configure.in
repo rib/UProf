@@ -217,8 +217,11 @@ AC_SUBST(UPROF_DEP_LIBS)
 dnl ================================================================
 dnl Dah Da!
 dnl ================================================================
+SHAVE_INIT([autotools], [enable])
 AC_OUTPUT(
 Makefile 
+autotools/shave
+autotools/shave-libtool
 uprof/Makefile
 dnl po/Makefile.in
 dnl uprof-0.1.pc
