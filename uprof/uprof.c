@@ -29,10 +29,11 @@
 
 struct _UProfContext
 {
-  guint ref;
+  guint  ref;
 
-  UProfCounter  *counters;
-  UProfTimer	*timers;
+  char	*name;
+  GList	*counters;
+  GList	*timers;
 };
 
 typedef struct _RDTSCVal
@@ -137,6 +138,8 @@ uprof_context_new (const char *name)
 {
   UProfContext *context = g_new0 (UProfContext, 1);
   context->ref = 1;
+
+  context->name = g_strdup (name);
   return context;
 }
 
@@ -151,41 +154,53 @@ uprof_context_unref (UProfContext *context)
 {
   context->ref--;
   if (!context->ref)
-    g_free (context);
-}
-
-void
-uprof_context_declare_counters (UProfContext *context, UProfCounter *counters)
-{
-  int i;
-
-  context->counters = counters;
-  for (i = 0; counters[i].name != NULL; i++)
     {
-      counters[i].count = 0;
+      g_free (context->name);
+      g_list_free (context->counters);
+      g_list_free (context->timers);
+      g_free (context);
     }
 }
 
 void
-uprof_context_declare_timers (UProfContext *context, UProfTimer *timers)
+uprof_context_add_counter (UProfContext *context, UProfCounter *counter)
 {
-  int i;
+  context->counters = g_list_prepend (context->counters, counter);
+}
 
-  context->timers = timers;
-  for (i = 0; timers[i].name != NULL; i++)
-    {
-      timers[i].count = 0;
-      timers[i].start = 0;
-      timers[i].total = 0;
-    }
+void
+uprof_context_add_timer (UProfContext *context, UProfTimer *timer)
+{
+  context->timers = g_list_prepend (context->timers, timer);
 }
 
 void
 uprof_context_output_report (UProfContext *context)
 {
+  GList *l;
 
+  /* XXX: This needs to support stuff like applications being able to manually
+   * iterate the UProf{Counter,Timer} structures for custom reporting. */
+
+  g_print ("\n");
+  g_print ("UProf report:\n");
+  g_print (" context: %s\n", context->name);
+  g_print ("\n");
+  g_print (" counters:\n");
+  for (l = context->counters; l != NULL; l = l->next)
+    {
+      UProfCounter *counter = l->data;
+      g_print (" %-50s %-5ld\n", counter->name, counter->count);
+    }
+  g_print ("\n");
+  g_print (" timers:\n");
+  for (l = context->timers; l != NULL; l = l->next)
+    {
+      UProfTimer *timer = l->data;
+      /* FIXME: how about some sensible units at least :-) */
+      g_print (" %-50s total = %-5f\n", timer->name, (float)timer->total);
+    }
 }
-
 
 /* Should be easy to add new probes to code, and ideally not need to
  * modify the profile reporting code in most cases.

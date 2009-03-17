@@ -3,31 +3,29 @@
 
 #include <stdio.h>
 
-UProfCounter counters[] = {
-  {
-    .name = "Simple counter"
-  },
-  {0}
-};
+UPROF_DECLARE_COUNTER (simple_counter,
+		       "Simple counter",
+		       "An example counter",
+		       0 /* no application private data */
+		       );
 
-UProfTimer timers[] = {
-  {
-    .name = "Simple timer"
-  },
-  {0}
-};
+UPROF_DECLARE_TIMER (simple_timer,
+		     NULL, /* no parent */
+		     "Simple timer",
+		     "An example timer",
+		     0 /* no application private data */
+		     );
 
 int
 main (int argc, char **argv)
 {
   UProfContext *context;
   int i;
+  struct timespec delay;
 
   uprof_init (&argc, &argv);
 
   context = uprof_context_new ("Simple context");
-  uprof_context_declare_counters (context, counters);
-  uprof_context_declare_timers (context, timers);
 
   /* TODO
    * I think the details about how timers/counters are declared probably needs
@@ -54,8 +52,18 @@ main (int argc, char **argv)
    *
    */
 
+  delay.tv_sec = 0;
+  delay.tv_nsec = 1000000000/4;
+
   for (i = 0; i < 10; i ++)
-    printf ("rdtsc = %llu\n", uprof_query_system_counter ());
+    {
+      UPROF_COUNTER_INC (context, simple_counter);
+      printf ("rdtsc = %llu\n", uprof_get_system_counter ());
+
+      UPROF_TIMER_START (context, simple_timer);
+      nanosleep (&delay, NULL);
+      UPROF_TIMER_STOP (context, simple_timer);
+    }
 
   uprof_context_output_report (context);
 

@@ -8,29 +8,48 @@ typedef struct _UProfContext UProfContext;
 typedef struct _UProfCounter
 {
   /** Application defined name for counter */
-  char *name;
+  const char *name;
+
+  /** Application defined description for counter */
+  const char *description;
+
+  /** Application private data */
+  unsigned long priv;
 
   /** private */
-  guint count;
+  const char *filename;
+  long line;
+  const char *function;
 
+  long count;
+
+  guint seen:1;
 } UProfCounter;
 
 typedef struct _UProfTimer
 {
   /** Application defined name for timer */
-  char *name;
+  const char *name;
 
-  /** Application defined grouping */
-  guint group;
+  /** Application defined description for timer */
+  const char *description;
 
-  /** 0 is highest priority */
-  guint priority;
+  /** Application defined parent */
+  const char *parent;
+
+  /** Application private data */
+  unsigned long priv;
 
   /** private */
-  guint count;
+  const char *filename;
+  long line;
+  const char *function;
+
+  unsigned long count;
   unsigned long long start;
   unsigned long long total;
 
+  guint seen:1;
   guint	running:1;
 
 } UProfTimer;
@@ -74,31 +93,28 @@ void
 uprof_context_unref (UProfContext *context);
 
 /**
- * uprof_context_declare_counters:
- * @context: A UProf context
- * @counters: Your application counters FIXME
- *
- * Declares a set of application counters. FIXME
- */
-void
-uprof_context_declare_counters (UProfContext *context, UProfCounter *counters);
-
-/**
- * uprof_context_declare_timers:
- * @context: A UProf context
- * @counters: Your application timers FIXME
- *
- * Declares a set of application counters. FIXME
- */
-void
-uprof_context_declare_timers (UProfContext *context, UProfTimer *timers);
-
-/**
  * uprof_get_system_counter:
  * FIXME
  */
 unsigned long long
 uprof_get_system_counter (void);
+
+/**
+ * uprof_context_add_counter:
+ * @context: A UProf context
+ * FIXME
+ */
+void
+uprof_context_add_counter (UProfContext *context, UProfCounter *counter);
+
+
+/**
+ * uprof_context_add_timer:
+ * @context: A UProf context
+ * FIXME
+ */
+void
+uprof_context_add_timer (UProfContext *context, UProfTimer *timer);
 
 /**
  * uprof_context_output_report:
@@ -110,7 +126,122 @@ uprof_get_system_counter (void);
 void
 uprof_context_output_report (UProfContext *context);
 
-//#define UPROF_TIMER_START()
+
+/************
+ * Counters
+ ************/
+
+/**
+ * UPROF_DECLARE_COUNTER:
+ * @COUNTER_SYMBOL: The name of the C symbol to declare
+ * @DESCRIPTION: A string describing what the timer represents
+ * @PRIV: Optional private data (unsigned long) which you can get to if you are
+ *	  generating a very customized report. For example you might put
+ *	  application specific flags here that affect reporting.
+ *
+ * This can be used to declare a new static counter structure
+ */
+#define UPROF_DECLARE_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV) \
+  static UProfCounter COUNTER_SYMBOL = { \
+    .name = NAME, \
+    .description = DESCRIPTION, \
+    .priv = (unsigned long)(PRIV), \
+    .seen = 0 \
+  }
+
+#define INIT_UNSEEN_COUNTER(CONTEXT, COUNTER_SYMBOL) \
+  do { \
+    (COUNTER_SYMBOL).filename = __FILE__; \
+    (COUNTER_SYMBOL).line = __LINE__; \
+    (COUNTER_SYMBOL).function = __FUNCTION__; \
+    (COUNTER_SYMBOL).seen = 1; \
+    (COUNTER_SYMBOL).count = 0; \
+    uprof_context_add_counter (CONTEXT, &(COUNTER_SYMBOL)); \
+  } while (0)
+
+#define UPROF_COUNTER_INC(CONTEXT, COUNTER_SYMBOL) \
+  do { \
+    if (!(COUNTER_SYMBOL).seen) \
+      INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL); \
+    (COUNTER_SYMBOL).count++; \
+  } while (0)
+
+#define UPROF_COUNTER_DEC(CONTEXT, COUNTER_SYMBOL) \
+  do { \
+    if (!(COUNTER_SYMBOL).seen) \
+      INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL) \
+    (COUNTER_SYMBOL).count--; \
+  } while (0)
+
+#define UPROF_COUNTER_ZERO(CONTEXT, COUNTER_SYMBOL) \
+  do { \
+    if (!(COUNTER_SYMBOL).seen) \
+      INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL) \
+    (COUNTER_SYMBOL).count = 0; \
+  } while (0)
+
+
+
+/************
+ * Timers
+ ************/
+
+/**
+ * UPROF_DECLARE_TIMER:
+ * @TIMER_SYMBOL: The name of the C symbol to declare
+ * @PARENT: The name of a parent timer (it should really be the name given to
+ *	    the parent, not the C symbol name for the parent)
+ * @DESCRIPTION: A string describing what the timer represents
+ * @PRIV: Optional private data (unsigned long) which you can get to if you are
+ *	  generating a very customized report. For example you might put
+ *	  application specific flags here that affect reporting.
+ * This can be used to declare a new static timer structure
+ */
+#define UPROF_DECLARE_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV) \
+  static UProfTimer TIMER_SYMBOL = { \
+    .name = NAME, \
+    .description = DESCRIPTION, \
+    .priv = (unsigned long)(PRIV), \
+    .seen = 0 \
+  }
+
+#define UPROF_TIMER_START(CONTEXT, TIMER_SYMBOL) \
+  do { \
+    if (!(TIMER_SYMBOL).seen) \
+      { \
+	(TIMER_SYMBOL).filename = __FILE__; \
+	(TIMER_SYMBOL).line = __LINE__; \
+	(TIMER_SYMBOL).function = __FUNCTION__; \
+	uprof_context_add_timer (CONTEXT, &(TIMER_SYMBOL)); \
+	(TIMER_SYMBOL).seen = 1; \
+	(TIMER_SYMBOL).total = 0; \
+      } \
+    (TIMER_SYMBOL).start = uprof_get_system_counter (); \
+  } while (0)
+
+/* XXX: We should add debug profiling to also verify that the timer isn't already
+ * running. */
+
+/* XXX: We should consider system counter wrap around issues */
+
+#define UPROF_TIMER_STOP(CONTEXT, TIMER_SYMBOL) \
+  do { \
+    (TIMER_SYMBOL).count++; \
+    (TIMER_SYMBOL).total += uprof_get_system_counter() - (TIMER_SYMBOL).start; \
+  } while (0)
+
+
+/* XXX: We should keep in mind the slightly thorny issues of handling shared
+ * libraries, where various constants can dissapear as well as the timers
+ * themselves. Since the UProf context is always on the heap, we can always
+ * add some kind of uprof_context_internalize() mechanism later to ensure that
+ * timer/counter statistics are never lost even though the underlying
+ * timer structures may come and go. */
+
+/* XXX: We might want the ability to declare "alias" timers so that we
+ * can track multiple (filename, line, function) constants for essentially
+ * the same timer. */
+
 
 #endif /* _UPROF_H_ */
 
