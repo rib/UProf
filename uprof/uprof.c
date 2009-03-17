@@ -165,12 +165,16 @@ uprof_context_unref (UProfContext *context)
 void
 uprof_context_add_counter (UProfContext *context, UProfCounter *counter)
 {
+  /* XXX: Check if we have actually seen this counter before; it might be that
+   * it belongs to a dynamic shared object that has been reloaded */
   context->counters = g_list_prepend (context->counters, counter);
 }
 
 void
 uprof_context_add_timer (UProfContext *context, UProfTimer *timer)
 {
+  /* XXX: Check if we have actually seen this counter before; it might be that
+   * it belongs to a dynamic shared object that has been reloaded */
   context->timers = g_list_prepend (context->timers, timer);
 }
 

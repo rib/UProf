@@ -49,6 +49,9 @@ typedef struct _UProfTimer
   unsigned long long start;
   unsigned long long total;
 
+  unsigned long long fastest;
+  unsigned long long slowest;
+
   guint seen:1;
   guint	running:1;
 
@@ -106,7 +109,6 @@ uprof_get_system_counter (void);
  */
 void
 uprof_context_add_counter (UProfContext *context, UProfCounter *counter);
-
 
 /**
  * uprof_context_add_timer:
@@ -226,10 +228,21 @@ uprof_context_output_report (UProfContext *context);
 
 #define UPROF_TIMER_STOP(CONTEXT, TIMER_SYMBOL) \
   do { \
+    unsigned long long duration; \
     (TIMER_SYMBOL).count++; \
-    (TIMER_SYMBOL).total += uprof_get_system_counter() - (TIMER_SYMBOL).start; \
+    duration = uprof_get_system_counter() - (TIMER_SYMBOL).start; \
+    if ((duration < (TIMER_SYMBOL).fastest)) \
+      (TIMER_SYMBOL).fastest = duration; \
+    else if ((duration > (TIMER_SYMBOL).slowest)) \
+      (TIMER_SYMBOL).slowest = duration; \
+    (TIMER_SYMBOL).total += duration; \
   } while (0)
 
+/* TODO: */
+#if 0
+#define UPROF_TIMER_PAUSE()
+#define UPROF_TIMER_CONTINUE()
+#endif
 
 /* XXX: We should keep in mind the slightly thorny issues of handling shared
  * libraries, where various constants can dissapear as well as the timers
@@ -242,6 +255,17 @@ uprof_context_output_report (UProfContext *context);
  * can track multiple (filename, line, function) constants for essentially
  * the same timer. */
 
+/* XXX: It would be nice if we could find a way to generalize how
+ * relationships between timers and counters are made so we don't need
+ * specialized reporting code to handle these use cases:
+ *
+ * - Having a frame_counter, and then other counters reported relative
+ *   to the frame counter; such as averages of minor counters per frame.
+ *
+ * - Being able to report timer stats in relation to a counter (such as
+ *   a frame counter). For example reporting the average time spent
+ *   painting, per frame.
+ */
 
 #endif /* _UPROF_H_ */
 
