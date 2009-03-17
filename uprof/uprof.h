@@ -36,6 +36,13 @@ typedef struct _UProfTimer
 } UProfTimer;
 
 /**
+ * uprof_init:
+ * FIXME
+ */
+void
+uprof_init (int *argc, char ***argv);
+
+/**
  * uprof_context_new:
  * @name: The top most name to categorize your profiling results
  *
@@ -85,6 +92,23 @@ uprof_context_declare_counters (UProfContext *context, UProfCounter *counters);
  */
 void
 uprof_context_declare_timers (UProfContext *context, UProfTimer *timers);
+
+/**
+ * uprof_query_system_counter:
+ * FIXME
+ */
+unsigned long long
+uprof_query_system_counter (void);
+
+/**
+ * uprof_context_output_report:
+ * @context: A UProf context
+ *
+ * Generates a report of the accumulated timer and counter data associated with
+ * the given context.
+ */
+void
+uprof_context_output_report (UProfContext *context);
 
 //#define UPROF_TIMER_START()
 

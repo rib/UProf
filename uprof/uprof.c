@@ -49,7 +49,7 @@ typedef struct _RDTSCVal
 unsigned long long system_counter_hz;
 
 
-static inline unsigned long long
+unsigned long long
 uprof_query_system_counter (void)
 {
 #if __i386__
@@ -80,7 +80,7 @@ uprof_query_system_counter (void)
 #endif
 }
 
-gboolean
+void
 uprof_init (int *argc, char ***argv)
 {
   unsigned long long time0, time1 = 0;
@@ -88,7 +88,7 @@ uprof_init (int *argc, char ***argv)
   unsigned long long diff;
 
   if (system_counter_hz)
-    return TRUE;
+    return;
 
   /* Determine the frequency of our time source */
   DEBUG ("Determining the frequency of the system counter\n");
@@ -103,10 +103,7 @@ uprof_init (int *argc, char ***argv)
 	  if (errno == EINTR)
 	    continue;
 	  else
-	    {
-	      g_print ("Failed to init uprof, due to nanosleep error\n");
-	      return FALSE;
-	    }
+	    g_critical ("Failed to init uprof, due to nanosleep error\n");
 	}
       else
 	{
@@ -127,8 +124,6 @@ uprof_init (int *argc, char ***argv)
   DEBUG ("time1: %llu\n", time1);
   DEBUG ("Diff over 1/4 second: %llu\n", diff);
   DEBUG ("System Counter HZ: %llu\n", system_counter_hz);
-
-  return TRUE;
 }
 
 unsigned long long
@@ -186,7 +181,7 @@ uprof_context_declare_timers (UProfContext *context, UProfTimer *timers)
 }
 
 void
-uprof_get_report (UProfContext *context)
+uprof_context_output_report (UProfContext *context)
 {
 
 }

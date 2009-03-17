@@ -1,4 +1,4 @@
-SUBDIRS = uprof
+SUBDIRS = uprof tests
 #SUBDIRS += doc
 #SUBDIRS += po
 
