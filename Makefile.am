@@ -1,8 +1,8 @@
 SUBDIRS = uprof
 #SUBDIRS += doc
-
-
 #SUBDIRS += po
+
+ACLOCAL_AMFLAGS = -I autotools/m4
 
 #EXTRA_DIST = \
 #	intltool-extract.in \
