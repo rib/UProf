@@ -1,0 +1,10 @@
+compile
+config.guess
+config.sub
+depcomp
+gnome-doc-utils.make
+install-sh
+ltmain.sh
+missing
+shave
+shave-libtool
