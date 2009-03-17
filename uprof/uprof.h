@@ -94,11 +94,11 @@ void
 uprof_context_declare_timers (UProfContext *context, UProfTimer *timers);
 
 /**
- * uprof_query_system_counter:
+ * uprof_get_system_counter:
  * FIXME
  */
 unsigned long long
-uprof_query_system_counter (void);
+uprof_get_system_counter (void);
 
 /**
  * uprof_context_output_report:

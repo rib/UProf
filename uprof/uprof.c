@@ -50,7 +50,7 @@ unsigned long long system_counter_hz;
 
 
 unsigned long long
-uprof_query_system_counter (void)
+uprof_get_system_counter (void)
 {
 #if __i386__
   RDTSCVal rdtsc;
@@ -95,7 +95,7 @@ uprof_init (int *argc, char ***argv)
 
   while (1)
     {
-      time0 = uprof_query_system_counter ();
+      time0 = uprof_get_system_counter ();
       delay.tv_sec = 0;
       delay.tv_nsec = 1000000000/4;
       if (nanosleep (&delay, NULL) == -1)
@@ -107,7 +107,7 @@ uprof_init (int *argc, char ***argv)
 	}
       else
 	{
-	  time1 = uprof_query_system_counter ();
+	  time1 = uprof_get_system_counter ();
 	  break;
 	}
     }
