@@ -22,6 +22,8 @@
 
 #include <glib.h>
 
+G_BEGIN_DECLS
+
 typedef struct _UProfContext UProfContext;
 
 typedef struct _UProfCounter
@@ -305,6 +307,8 @@ uprof_context_output_report (UProfContext *context);
 /* XXX: static globals shouldn't be the only way to declare timers and
  * counters; exported globals or malloc'd variables might be handy too.
  */
+
+G_END_DECLS
 
 #endif /* _UPROF_H_ */
 
