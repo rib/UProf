@@ -45,7 +45,8 @@ typedef struct _UProfCounter
   guint seen:1;
 } UProfCounter;
 
-typedef struct _UProfTimer
+typedef struct _UProfTimer UProfTimer;
+struct _UProfTimer
 {
   /** Application defined name for timer */
   const char *name;
@@ -54,7 +55,7 @@ typedef struct _UProfTimer
   const char *description;
 
   /** Application defined parent */
-  const char *parent;
+  const char *parent_name;
 
   /** Application private data */
   unsigned long priv;
@@ -71,10 +72,13 @@ typedef struct _UProfTimer
   unsigned long long fastest;
   unsigned long long slowest;
 
-  guint seen:1;
-  guint reported:1;
+  /* note: not resolved until sorting @ report time */
+  UProfTimer *parent;
+  GList *children;
 
-} UProfTimer;
+  guint seen:1;
+
+};
 
 /**
  * uprof_init:
@@ -229,7 +233,7 @@ uprof_context_output_report (UProfContext *context);
   static UProfTimer TIMER_SYMBOL = { \
     .name = NAME, \
     .description = DESCRIPTION, \
-    .parent = PARENT, \
+    .parent_name = PARENT, \
     .priv = (unsigned long)(PRIV), \
     .seen = 0 \
   }
@@ -248,7 +252,6 @@ uprof_context_output_report (UProfContext *context);
 	(TIMER_SYMBOL).slowest = 0; \
 	(TIMER_SYMBOL).fastest = 0; \
 	(TIMER_SYMBOL).seen = 1; \
-	(TIMER_SYMBOL).reported = 0; \
       } \
     (TIMER_SYMBOL).start = uprof_get_system_counter (); \
   } while (0)

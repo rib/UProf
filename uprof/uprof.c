@@ -35,6 +35,7 @@ struct _UProfContext
   char	*name;
   GList	*counters;
   GList	*timers;
+  GList *root_timers;
 };
 
 typedef struct _RDTSCVal
@@ -187,38 +188,83 @@ find_timer_children (UProfContext *context, UProfTimer *parent)
   for (l = context->timers; l != NULL; l = l->next)
     {
       UProfTimer *timer = l->data;
-      if (timer->parent && strcmp (timer->parent, parent->name) == 0)
+      if (timer->parent_name && strcmp (timer->parent_name, parent->name) == 0)
 	children = g_list_prepend (children, timer);
     }
   return children;
 }
 
+gint
+compare_timer_totals (UProfTimer *a, UProfTimer *b)
+{
+  if (a->total > b->total)
+    return -1;
+  else if (a->total < b->total)
+    return 1;
+  else
+    return 0;
+}
+
+/*
+ * Timer parents are declared using a string to name parents; this function
+ * takes the names and resolves them to actual UProfTimer structures.
+ */
+static void
+resolve_timer_heirachy (UProfContext *context,
+			UProfTimer *timer,
+			UProfTimer *parent)
+{
+  GList *l;
+  timer->parent = parent;
+  timer->children = find_timer_children (context, timer);
+  for (l = timer->children; l != NULL; l = l->next)
+    resolve_timer_heirachy (context, (UProfTimer *)l->data, timer);
+}
+
+static void
+sort_timers (UProfContext *context)
+{
+  GList *l;
+
+  context->timers = g_list_reverse (context->timers);
+
+  /* First use the parent names of timers to resolve the actual parent
+   * child heirachy (fill in timer .children, and .parent members) */
+  for (l = context->timers; l != NULL; l = l->next)
+    {
+      UProfTimer *timer = l->data;
+      if (timer->parent == NULL)
+	{
+	  resolve_timer_heirachy (context, timer, NULL);
+	  context->root_timers = g_list_prepend (context->root_timers, timer);
+	}
+    }
+
+  context->root_timers =
+    g_list_sort (context->root_timers, (GCompareFunc)compare_timer_totals);
+  for (l = context->timers; l != NULL; l = l->next)
+    {
+      UProfTimer *timer = l->data;
+      timer->children =
+	g_list_sort (timer->children, (GCompareFunc)compare_timer_totals);
+    }
+}
+
 static void
 print_timer_and_children (UProfContext *context,
 			  UProfTimer *timer,
-			  UProfTimer *parent,
 			  const char *prefix)
 {
   GList *l;
-  GList *children;
   char *new_prefix = g_strdup_printf ("%*s",  strlen (prefix) + 2, "");
-
-  if (timer->reported)
-    return;
 
   g_print ("%s%-50s total = %-5f sec\n",
 	   prefix,
 	   timer->name,
 	   (float)timer->total / system_counter_hz);
-  timer->reported = 1;
 
-  children = find_timer_children (context, timer);
-  for (l = children; l != NULL; l = l->next)
-    print_timer_and_children (context,
-			      (UProfTimer *)l->data,
-			      timer,
-			      new_prefix);
-  g_list_free (children);
+  for (l = timer->children; l != NULL; l = l->next)
+    print_timer_and_children (context, (UProfTimer *)l->data, new_prefix);
 
   g_free (new_prefix);
 }
@@ -244,9 +290,9 @@ uprof_context_output_report (UProfContext *context)
     }
   g_print ("\n");
   g_print (" timers:\n");
-  context->timers = g_list_reverse (context->timers);
-  for (l = context->timers; l != NULL; l = l->next)
-    print_timer_and_children (context, (UProfTimer *)l->data, NULL, " ");
+  sort_timers (context);
+  for (l = context->root_timers; l != NULL; l = l->next)
+    print_timer_and_children (context, (UProfTimer *)l->data, " ");
 }
 
 /* Should be easy to add new probes to code, and ideally not need to
