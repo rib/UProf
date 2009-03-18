@@ -28,6 +28,8 @@
 
 #define DEBUG g_print
 
+#define REPORT_COLUMN0_WIDTH 50
+
 struct _UProfContext
 {
   guint  ref;
@@ -253,20 +255,21 @@ sort_timers (UProfContext *context)
 static void
 print_timer_and_children (UProfContext *context,
 			  UProfTimer *timer,
-			  const char *prefix)
+			  int indent)
 {
   GList *l;
-  char *new_prefix = g_strdup_printf ("%*s",  strlen (prefix) + 2, "");
 
-  g_print ("%s%-50s total = %-5f sec\n",
-	   prefix,
+  indent *= 2; /* 2 spaces per indent level */
+
+  g_print (" %*s%-*s%-5fsec\n",
+	   indent,
+	   "",
+	   REPORT_COLUMN0_WIDTH - indent,
 	   timer->name,
 	   (float)timer->total / system_counter_hz);
 
   for (l = timer->children; l != NULL; l = l->next)
-    print_timer_and_children (context, (UProfTimer *)l->data, new_prefix);
-
-  g_free (new_prefix);
+    print_timer_and_children (context, (UProfTimer *)l->data, indent + 1);
 }
 
 void
@@ -286,13 +289,14 @@ uprof_context_output_report (UProfContext *context)
   for (l = context->counters; l != NULL; l = l->next)
     {
       UProfCounter *counter = l->data;
-      g_print (" %-50s %-5ld\n", counter->name, counter->count);
+      g_print ("   %-*s%-5ld\n", REPORT_COLUMN0_WIDTH - 2,
+	       counter->name, counter->count);
     }
   g_print ("\n");
   g_print (" timers:\n");
   sort_timers (context);
   for (l = context->root_timers; l != NULL; l = l->next)
-    print_timer_and_children (context, (UProfTimer *)l->data, " ");
+    print_timer_and_children (context, (UProfTimer *)l->data, 1);
 }
 
 /* Should be easy to add new probes to code, and ideally not need to
