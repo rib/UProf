@@ -200,8 +200,8 @@ uprof_context_output_report (UProfContext *context)
   for (l = context->timers; l != NULL; l = l->next)
     {
       UProfTimer *timer = l->data;
-      /* FIXME: how about some sensible units at least :-) */
-      g_print (" %-50s total = %-5f\n", timer->name, (float)timer->total);
+      g_print (" %-50s total = %-5f sec\n",
+	       timer->name, (float)timer->total / system_counter_hz);
     }
 }
 
