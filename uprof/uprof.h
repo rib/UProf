@@ -72,7 +72,7 @@ typedef struct _UProfTimer
   unsigned long long slowest;
 
   guint seen:1;
-  guint	running:1;
+  guint reported:1;
 
 } UProfTimer;
 
@@ -229,6 +229,7 @@ uprof_context_output_report (UProfContext *context);
   static UProfTimer TIMER_SYMBOL = { \
     .name = NAME, \
     .description = DESCRIPTION, \
+    .parent = PARENT, \
     .priv = (unsigned long)(PRIV), \
     .seen = 0 \
   }
@@ -241,8 +242,13 @@ uprof_context_output_report (UProfContext *context);
 	(TIMER_SYMBOL).line = __LINE__; \
 	(TIMER_SYMBOL).function = __FUNCTION__; \
 	uprof_context_add_timer (CONTEXT, &(TIMER_SYMBOL)); \
-	(TIMER_SYMBOL).seen = 1; \
+	(TIMER_SYMBOL).count = 0; \
+	(TIMER_SYMBOL).start = 0; \
 	(TIMER_SYMBOL).total = 0; \
+	(TIMER_SYMBOL).slowest = 0; \
+	(TIMER_SYMBOL).fastest = 0; \
+	(TIMER_SYMBOL).seen = 1; \
+	(TIMER_SYMBOL).reported = 0; \
       } \
     (TIMER_SYMBOL).start = uprof_get_system_counter (); \
   } while (0)

@@ -24,6 +24,7 @@
 #include <time.h>
 #include <glib.h>
 #include <errno.h>
+#include <string.h>
 
 #define DEBUG g_print
 
@@ -177,6 +178,51 @@ uprof_context_add_timer (UProfContext *context, UProfTimer *timer)
   context->timers = g_list_prepend (context->timers, timer);
 }
 
+static GList *
+find_timer_children (UProfContext *context, UProfTimer *parent)
+{
+  GList *l;
+  GList *children = NULL;
+
+  for (l = context->timers; l != NULL; l = l->next)
+    {
+      UProfTimer *timer = l->data;
+      if (timer->parent && strcmp (timer->parent, parent->name) == 0)
+	children = g_list_prepend (children, timer);
+    }
+  return children;
+}
+
+static void
+print_timer_and_children (UProfContext *context,
+			  UProfTimer *timer,
+			  UProfTimer *parent,
+			  const char *prefix)
+{
+  GList *l;
+  GList *children;
+  char *new_prefix = g_strdup_printf ("%*s",  strlen (prefix) + 2, "");
+
+  if (timer->reported)
+    return;
+
+  g_print ("%s%-50s total = %-5f sec\n",
+	   prefix,
+	   timer->name,
+	   (float)timer->total / system_counter_hz);
+  timer->reported = 1;
+
+  children = find_timer_children (context, timer);
+  for (l = children; l != NULL; l = l->next)
+    print_timer_and_children (context,
+			      (UProfTimer *)l->data,
+			      timer,
+			      new_prefix);
+  g_list_free (children);
+
+  g_free (new_prefix);
+}
+
 void
 uprof_context_output_report (UProfContext *context)
 {
@@ -190,6 +236,7 @@ uprof_context_output_report (UProfContext *context)
   g_print (" context: %s\n", context->name);
   g_print ("\n");
   g_print (" counters:\n");
+  context->counters = g_list_reverse (context->counters);
   for (l = context->counters; l != NULL; l = l->next)
     {
       UProfCounter *counter = l->data;
@@ -197,12 +244,9 @@ uprof_context_output_report (UProfContext *context)
     }
   g_print ("\n");
   g_print (" timers:\n");
+  context->timers = g_list_reverse (context->timers);
   for (l = context->timers; l != NULL; l = l->next)
-    {
-      UProfTimer *timer = l->data;
-      g_print (" %-50s total = %-5f sec\n",
-	       timer->name, (float)timer->total / system_counter_hz);
-    }
+    print_timer_and_children (context, (UProfTimer *)l->data, NULL, " ");
 }
 
 /* Should be easy to add new probes to code, and ideally not need to
