@@ -189,7 +189,7 @@ autotools/shave
 autotools/shave-libtool
 uprof/Makefile
 tests/Makefile
+uprof-$UPROF_MAJOR_VERSION.$UPROF_MINOR_VERSION.pc:uprof.pc.in
 dnl po/Makefile.in
-dnl uprof-0.1.pc
 )
 

@@ -4,6 +4,11 @@ SUBDIRS = uprof tests
 
 ACLOCAL_AMFLAGS = -I autotools/m4
 
+pcfiles = uprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@.pc
+
+pkgconfig_DATA = $(pcfiles)
+pkgconfigdir   = $(libdir)/pkgconfig
+
 #EXTRA_DIST = \
 #	intltool-extract.in \
 #	intltool-merge.in \

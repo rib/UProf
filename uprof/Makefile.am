@@ -14,5 +14,8 @@ libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_CPPFLAGS = \
     -I$(top_srcdir)/src \
     @EXTRA_CPPFLAGS@
 
-#EXTRA_DIST = 
+uprofincludedir = $(includedir)/uprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@
+uprofinclude_HEADERS = uprof.h
+
+#EXTRA_DIST =
 
