@@ -44,8 +44,8 @@ typedef struct _RDTSCVal
 {
   union {
       struct {
-	  uint32_t low;
-	  uint32_t hi;
+          uint32_t low;
+          uint32_t hi;
       } split;
       unsigned long long full_value;
   } u;
@@ -72,17 +72,17 @@ uprof_init (int *argc, char ***argv)
       delay.tv_sec = 0;
       delay.tv_nsec = 1000000000/4;
       if (nanosleep (&delay, NULL) == -1)
-	{
-	  if (errno == EINTR)
-	    continue;
-	  else
-	    g_critical ("Failed to init uprof, due to nanosleep error\n");
-	}
+        {
+          if (errno == EINTR)
+            continue;
+          else
+            g_critical ("Failed to init uprof, due to nanosleep error\n");
+        }
       else
-	{
-	  time1 = uprof_get_system_counter ();
-	  break;
-	}
+        {
+          time1 = uprof_get_system_counter ();
+          break;
+        }
     }
 
   /* Note: by saving hz into a global variable, processes that involve
@@ -191,7 +191,7 @@ find_timer_children (UProfContext *context, UProfTimer *parent)
     {
       UProfTimer *timer = l->data;
       if (timer->parent_name && strcmp (timer->parent_name, parent->name) == 0)
-	children = g_list_prepend (children, timer);
+        children = g_list_prepend (children, timer);
     }
   return children;
 }
@@ -213,8 +213,8 @@ compare_timer_totals (UProfTimer *a, UProfTimer *b)
  */
 static void
 resolve_timer_heirachy (UProfContext *context,
-			UProfTimer *timer,
-			UProfTimer *parent)
+                        UProfTimer *timer,
+                        UProfTimer *parent)
 {
   GList *l;
   timer->parent = parent;
@@ -236,10 +236,10 @@ sort_timers (UProfContext *context)
     {
       UProfTimer *timer = l->data;
       if (timer->parent == NULL)
-	{
-	  resolve_timer_heirachy (context, timer, NULL);
-	  context->root_timers = g_list_prepend (context->root_timers, timer);
-	}
+        {
+          resolve_timer_heirachy (context, timer, NULL);
+          context->root_timers = g_list_prepend (context->root_timers, timer);
+        }
     }
 
   context->root_timers =
@@ -248,25 +248,25 @@ sort_timers (UProfContext *context)
     {
       UProfTimer *timer = l->data;
       timer->children =
-	g_list_sort (timer->children, (GCompareFunc)compare_timer_totals);
+        g_list_sort (timer->children, (GCompareFunc)compare_timer_totals);
     }
 }
 
 static void
 print_timer_and_children (UProfContext *context,
-			  UProfTimer *timer,
-			  int indent)
+                          UProfTimer *timer,
+                          int indent)
 {
   GList *l;
 
   indent *= 2; /* 2 spaces per indent level */
 
   g_print (" %*s%-*s%-5fsec\n",
-	   indent,
-	   "",
-	   REPORT_COLUMN0_WIDTH - indent,
-	   timer->name,
-	   (float)timer->total / system_counter_hz);
+           indent,
+           "",
+           REPORT_COLUMN0_WIDTH - indent,
+           timer->name,
+           (float)timer->total / system_counter_hz);
 
   for (l = timer->children; l != NULL; l = l->next)
     print_timer_and_children (context, (UProfTimer *)l->data, indent + 1);
@@ -290,7 +290,7 @@ uprof_context_output_report (UProfContext *context)
     {
       UProfCounter *counter = l->data;
       g_print ("   %-*s%-5ld\n", REPORT_COLUMN0_WIDTH - 2,
-	       counter->name, counter->count);
+               counter->name, counter->count);
     }
   g_print ("\n");
   g_print (" timers:\n");

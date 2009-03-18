@@ -4,51 +4,51 @@
 #include <stdio.h>
 
 UPROF_DECLARE_TIMER (full_timer,
-		     NULL, /* no parent */
-		     "Full timer",
-		     "A timer for the test delays in loop0",
-		     0 /* no application private data */
-		     );
+                     NULL, /* no parent */
+                     "Full timer",
+                     "A timer for the test delays in loop0",
+                     0 /* no application private data */
+);
 
 UPROF_DECLARE_COUNTER (loop0_counter,
-		       "Loop0 counter",
-		       "A Counter for the first loop",
-		       0 /* no application private data */
-		       );
+                       "Loop0 counter",
+                       "A Counter for the first loop",
+                       0 /* no application private data */
+);
 
 UPROF_DECLARE_TIMER (loop0_timer,
-		     "Full timer", /* parent */
-		     "Loop0 timer",
-		     "A timer for the test delays in loop0",
-		     0 /* no application private data */
-		     );
+                     "Full timer", /* parent */
+                     "Loop0 timer",
+                     "A timer for the test delays in loop0",
+                     0 /* no application private data */
+);
 
 UPROF_DECLARE_TIMER (loop0_sub_timer,
-		     "Loop0 timer", /* parent */
-		     "Loop0 sub timer",
-		     "An example sub timer for loop0",
-		     0 /* no application private data */
-		     );
+                     "Loop0 timer", /* parent */
+                     "Loop0 sub timer",
+                     "An example sub timer for loop0",
+                     0 /* no application private data */
+);
 
 UPROF_DECLARE_COUNTER (loop1_counter,
-		       "Loop1 counter",
-		       "A Counter for the first loop",
-		       0 /* no application private data */
-		       );
+                       "Loop1 counter",
+                       "A Counter for the first loop",
+                       0 /* no application private data */
+);
 
 UPROF_DECLARE_TIMER (loop1_timer,
-		     "Full timer", /* parent */
-		     "Loop1 timer",
-		     "A timer for the test delays in loop1",
-		     0 /* no application private data */
-		     );
+                     "Full timer", /* parent */
+                     "Loop1 timer",
+                     "A timer for the test delays in loop1",
+                     0 /* no application private data */
+);
 
 UPROF_DECLARE_TIMER (loop1_sub_timer,
-		     "Loop1 timer", /* parent */
-		     "Loop1 sub timer",
-		     "An example sub timer for loop1",
-		     0 /* no application private data */
-		     );
+                     "Loop1 timer", /* parent */
+                     "Loop1 sub timer",
+                     "An example sub timer for loop1",
+                     0 /* no application private data */
+);
 
 
 int
