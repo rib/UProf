@@ -67,6 +67,12 @@ static unsigned long long system_counter_hz;
 void
 uprof_init (int *argc, char ***argv)
 {
+
+}
+
+static void
+uprof_calibrate_system_counter (void)
+{
   unsigned long long time0, time1 = 0;
   struct timespec delay;
   unsigned long long diff;
@@ -325,6 +331,8 @@ uprof_context_output_report (UProfContext *context)
 
   /* XXX: This needs to support stuff like applications being able to manually
    * iterate the UProf{Counter,Timer} structures for custom reporting. */
+
+  uprof_calibrate_system_counter ();
 
   g_print ("\n");
   g_print ("UProf report:\n");
