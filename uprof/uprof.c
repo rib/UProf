@@ -25,6 +25,7 @@
 #include <glib.h>
 #include <errno.h>
 #include <string.h>
+#include <glib/gprintf.h>
 
 #define DEBUG g_print
 
@@ -252,21 +253,56 @@ sort_timers (UProfContext *context)
     }
 }
 
+static const char *bars[] = {
+    " ",
+    "▏",
+    "▎",
+    "▍",
+    "▌",
+    "▋",
+    "▊",
+    "▉",
+    "█"
+};
+
+static UProfTimer *
+get_root_timer (UProfTimer *timer)
+{
+  while (timer->parent)
+    timer = timer->parent;
+
+  return timer;
+}
+
 static void
 print_timer_and_children (UProfContext *context,
                           UProfTimer *timer,
                           int indent)
 {
+  UProfTimer *root;
   GList *l;
+  float percent;
+  int bar_len;
+
+  /* percentages are reported relative to the root timer */
+  root = get_root_timer (timer);
 
   indent *= 2; /* 2 spaces per indent level */
 
-  g_print (" %*s%-*s%-5fsec\n",
+  percent = ((float)timer->total / (float)root->total) * 100.0;
+  g_print (" %*s%-*s%-10.2f(msec), %7.3f%% ",
            indent,
            "",
            REPORT_COLUMN0_WIDTH - indent,
            timer->name,
-           (float)timer->total / system_counter_hz);
+           ((float)timer->total / system_counter_hz) * 1000.0,
+           percent);
+
+  for (bar_len = 3.6 * percent; bar_len >= 8; bar_len -= 8)
+    g_printf ("%s", bars[8]);
+  if (bar_len)
+    g_printf ("%s", bars[bar_len]);
+  g_print ("\n");
 
   for (l = timer->children; l != NULL; l = l->next)
     print_timer_and_children (context, (UProfTimer *)l->data, indent + 1);
