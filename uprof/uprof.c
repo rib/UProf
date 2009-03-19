@@ -303,7 +303,7 @@ print_timer_and_children (UProfContext *context,
   /* percentages are reported relative to the root timer */
   root = get_root_timer (timer);
 
-  indent *= 2; /* 2 spaces per indent level */
+  indent += 2; /* 2 spaces per indent level */
 
   percent = ((float)timer->total / (float)root->total) * 100.0;
   g_print (" %*s%-*s%-10.2f(msec), %7.3f%% ",
