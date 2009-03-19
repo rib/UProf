@@ -27,8 +27,18 @@
 #include <string.h>
 #include <glib/gprintf.h>
 
-#define DEBUG g_print
+#define UPROF_DEBUG     1
 
+#ifdef UPROF_DEBUG
+#define DBG_PRINTF(fmt, args...)              \
+  do                                          \
+    {                                         \
+      printf ("[%s] " fmt, __FILE__, ##args); \
+    }                                         \
+  while (0)
+#else
+#define DBG_PRINTF(fmt, args...) do { } while (0)
+#endif
 #define REPORT_COLUMN0_WIDTH 50
 
 struct _UProfContext
@@ -65,7 +75,7 @@ uprof_init (int *argc, char ***argv)
     return;
 
   /* Determine the frequency of our time source */
-  DEBUG ("Determining the frequency of the system counter\n");
+  DBG_PRINTF ("Determining the frequency of the system counter\n");
 
   while (1)
     {
@@ -93,11 +103,11 @@ uprof_init (int *argc, char ***argv)
   diff = time1 - time0;
   system_counter_hz = diff * 4;
 
-  DEBUG ("time0: %llu\n", time0);
-  DEBUG (" <sleep for 1/4 second>\n");
-  DEBUG ("time1: %llu\n", time1);
-  DEBUG ("Diff over 1/4 second: %llu\n", diff);
-  DEBUG ("System Counter HZ: %llu\n", system_counter_hz);
+  DBG_PRINTF ("time0: %llu\n", time0);
+  DBG_PRINTF (" <sleep for 1/4 second>\n");
+  DBG_PRINTF ("time1: %llu\n", time1);
+  DBG_PRINTF ("Diff over 1/4 second: %llu\n", diff);
+  DBG_PRINTF ("System Counter HZ: %llu\n", system_counter_hz);
 }
 
 unsigned long long

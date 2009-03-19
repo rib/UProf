@@ -3,6 +3,19 @@
 
 #include <stdio.h>
 
+#define UPROF_DEBUG     1
+
+#ifdef UPROF_DEBUG
+#define DBG_PRINTF(fmt, args...)              \
+  do                                          \
+    {                                         \
+      printf ("[%s] " fmt, __FILE__, ##args); \
+    }                                         \
+  while (0)
+#else
+#define DBG_PRINTF(fmt, args...) do { } while (0)
+#endif
+
 UPROF_DECLARE_TIMER (full_timer,
                      NULL, /* no parent */
                      "Full timer",
@@ -62,29 +75,31 @@ main (int argc, char **argv)
   context = uprof_context_new ("Simple context");
 
 
-  printf ("start full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+  DBG_PRINTF ("start full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
   UPROF_TIMER_START (context, full_timer);
   for (i = 0; i < 2; i ++)
     {
       struct timespec delay;
       UPROF_COUNTER_INC (context, loop0_counter);
 
-      printf ("start simple timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+      DBG_PRINTF ("start simple timer (rdtsc = %llu)\n",
+                  uprof_get_system_counter ());
       UPROF_TIMER_START (context, loop0_timer);
-      printf ("  <delay: 1/2 sec>\n");
+      DBG_PRINTF ("  <delay: 1/2 sec>\n");
       delay.tv_sec = 0;
       delay.tv_nsec = 1000000000/2;
       nanosleep (&delay, NULL);
 
       UPROF_TIMER_START (context, loop0_sub_timer);
-      printf ("    <timing sub delay: 1/4 sec>\n");
+      DBG_PRINTF ("    <timing sub delay: 1/4 sec>\n");
       delay.tv_sec = 0;
       delay.tv_nsec = 1000000000/4;
       nanosleep (&delay, NULL);
       UPROF_TIMER_STOP (context, loop0_sub_timer);
 
       UPROF_TIMER_STOP (context, loop0_timer);
-      printf ("stop simple timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+      DBG_PRINTF ("stop simple timer (rdtsc = %llu)\n",
+                  uprof_get_system_counter ());
     }
 
   for (i = 0; i < 4; i ++)
@@ -92,25 +107,27 @@ main (int argc, char **argv)
       struct timespec delay;
       UPROF_COUNTER_INC (context, loop1_counter);
 
-      printf ("start simple timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+      DBG_PRINTF ("start simple timer (rdtsc = %llu)\n",
+                  uprof_get_system_counter ());
       UPROF_TIMER_START (context, loop1_timer);
-      printf ("  <delay: 1/4 sec>\n");
+      DBG_PRINTF ("  <delay: 1/4 sec>\n");
       delay.tv_sec = 0;
       delay.tv_nsec = 1000000000/4;
       nanosleep (&delay, NULL);
 
       UPROF_TIMER_START (context, loop1_sub_timer);
-      printf ("    <timing sub delay: 1/2 sec>\n");
+      DBG_PRINTF ("    <timing sub delay: 1/2 sec>\n");
       delay.tv_sec = 0;
       delay.tv_nsec = 1000000000/2;
       nanosleep (&delay, NULL);
       UPROF_TIMER_STOP (context, loop1_sub_timer);
 
       UPROF_TIMER_STOP (context, loop1_timer);
-      printf ("stop simple timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+      DBG_PRINTF ("stop simple timer (rdtsc = %llu)\n",
+                  uprof_get_system_counter ());
     }
 
-  printf ("stop full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+  DBG_PRINTF ("stop full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
   UPROF_TIMER_STOP (context, full_timer);
 
   uprof_context_output_report (context);
