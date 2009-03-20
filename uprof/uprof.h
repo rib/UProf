@@ -20,6 +20,8 @@
 #ifndef _UPROF_H_
 #define _UPROF_H_
 
+#include <uprof-private.h>
+
 #include <glib.h>
 
 G_BEGIN_DECLS
@@ -38,17 +40,15 @@ typedef struct _UProfCounter
   unsigned long priv;
 
   /** private */
+  UProfCounterState *state;
+
   const char *filename;
-  long line;
+  unsigned long line;
   const char *function;
 
-  long count;
-
-  guint seen:1;
 } UProfCounter;
 
-typedef struct _UProfTimer UProfTimer;
-struct _UProfTimer
+typedef struct _UProfTimer
 {
   /** Application defined name for timer */
   const char *name;
@@ -63,24 +63,13 @@ struct _UProfTimer
   unsigned long priv;
 
   /** private */
+  UProfTimerState *state;
+
   const char *filename;
-  long line;
+  unsigned long line;
   const char *function;
 
-  unsigned long count;
-  unsigned long long start;
-  unsigned long long total;
-
-  unsigned long long fastest;
-  unsigned long long slowest;
-
-  /* note: not resolved until sorting @ report time */
-  UProfTimer *parent;
-  GList *children;
-
-  guint seen:1;
-
-};
+} UProfTimer;
 
 /**
  * uprof_init:
@@ -180,7 +169,7 @@ uprof_context_output_report (UProfContext *context);
     .name = NAME, \
     .description = DESCRIPTION, \
     .priv = (unsigned long)(PRIV), \
-    .seen = 0 \
+    .state = NULL \
   }
 
 #define INIT_UNSEEN_COUNTER(CONTEXT, COUNTER_SYMBOL) \
@@ -188,30 +177,28 @@ uprof_context_output_report (UProfContext *context);
     (COUNTER_SYMBOL).filename = __FILE__; \
     (COUNTER_SYMBOL).line = __LINE__; \
     (COUNTER_SYMBOL).function = __FUNCTION__; \
-    (COUNTER_SYMBOL).seen = 1; \
-    (COUNTER_SYMBOL).count = 0; \
     uprof_context_add_counter (CONTEXT, &(COUNTER_SYMBOL)); \
   } while (0)
 
 #define UPROF_COUNTER_INC(CONTEXT, COUNTER_SYMBOL) \
   do { \
-    if (!(COUNTER_SYMBOL).seen) \
+    if (!(COUNTER_SYMBOL).state) \
       INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL); \
-    (COUNTER_SYMBOL).count++; \
+    (COUNTER_SYMBOL).state->count++; \
   } while (0)
 
 #define UPROF_COUNTER_DEC(CONTEXT, COUNTER_SYMBOL) \
   do { \
-    if (!(COUNTER_SYMBOL).seen) \
+    if (!(COUNTER_SYMBOL).state) \
       INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL) \
-    (COUNTER_SYMBOL).count--; \
+    (COUNTER_SYMBOL).state->count--; \
   } while (0)
 
 #define UPROF_COUNTER_ZERO(CONTEXT, COUNTER_SYMBOL) \
   do { \
-    if (!(COUNTER_SYMBOL).seen) \
+    if (!(COUNTER_SYMBOL).state) \
       INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL) \
-    (COUNTER_SYMBOL).count = 0; \
+    (COUNTER_SYMBOL).state->count = 0; \
   } while (0)
 
 
@@ -237,25 +224,19 @@ uprof_context_output_report (UProfContext *context);
     .description = DESCRIPTION, \
     .parent_name = PARENT, \
     .priv = (unsigned long)(PRIV), \
-    .seen = 0 \
+    .state = NULL \
   }
 
 #define UPROF_TIMER_START(CONTEXT, TIMER_SYMBOL) \
   do { \
-    if (!(TIMER_SYMBOL).seen) \
+    if (!(TIMER_SYMBOL).state) \
       { \
 	(TIMER_SYMBOL).filename = __FILE__; \
 	(TIMER_SYMBOL).line = __LINE__; \
 	(TIMER_SYMBOL).function = __FUNCTION__; \
 	uprof_context_add_timer (CONTEXT, &(TIMER_SYMBOL)); \
-	(TIMER_SYMBOL).count = 0; \
-	(TIMER_SYMBOL).start = 0; \
-	(TIMER_SYMBOL).total = 0; \
-	(TIMER_SYMBOL).slowest = 0; \
-	(TIMER_SYMBOL).fastest = 0; \
-	(TIMER_SYMBOL).seen = 1; \
       } \
-    (TIMER_SYMBOL).start = uprof_get_system_counter (); \
+    (TIMER_SYMBOL).state->start = uprof_get_system_counter (); \
   } while (0)
 
 /* XXX: We should add debug profiling to also verify that the timer isn't already
@@ -266,13 +247,13 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_TIMER_STOP(CONTEXT, TIMER_SYMBOL) \
   do { \
     unsigned long long duration; \
-    (TIMER_SYMBOL).count++; \
-    duration = uprof_get_system_counter() - (TIMER_SYMBOL).start; \
-    if ((duration < (TIMER_SYMBOL).fastest)) \
-      (TIMER_SYMBOL).fastest = duration; \
-    else if ((duration > (TIMER_SYMBOL).slowest)) \
-      (TIMER_SYMBOL).slowest = duration; \
-    (TIMER_SYMBOL).total += duration; \
+    (TIMER_SYMBOL).state->count++; \
+    duration = uprof_get_system_counter() - (TIMER_SYMBOL).state->start; \
+    if ((duration < (TIMER_SYMBOL).state->fastest)) \
+      (TIMER_SYMBOL).state->fastest = duration; \
+    else if ((duration > (TIMER_SYMBOL).state->slowest)) \
+      (TIMER_SYMBOL).state->slowest = duration; \
+    (TIMER_SYMBOL).state->total += duration; \
   } while (0)
 
 /* TODO: */

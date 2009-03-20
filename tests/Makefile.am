@@ -1,5 +1,5 @@
 
-noinst_PROGRAMS = simple
+noinst_PROGRAMS = simple dlopen
 
 AM_CFLAGS = \
 	    @EXTRA_CFLAGS@ \
@@ -12,4 +12,17 @@ AM_LDFLAGS = \
 	     $(top_builddir)/uprof/libuprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@.la
 
 simple_SOURCES = simple.c
+dlopen_SOURCES = dlopen.c
+dlopen_LDFLAGS = \
+		 -export-dynamic \
+		 $(AM_LDFLAGS)
 
+dlopen_LDADD = -ldl
+
+all-local: module.so
+include ./$(DEPDIR)/module.Po
+module.so: module.c
+	$(CC) -c module.c -MT module.o -MD -MP -MF .deps/module.Tpo -fPIC $(AM_CFLAGS)
+	$(CC) -o module.so -shared module.o
+clean-local:
+	rm -f module.so

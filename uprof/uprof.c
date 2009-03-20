@@ -51,6 +51,13 @@ struct _UProfContext
   GList *root_timers;
 };
 
+typedef struct _UProfObjectLocation
+{
+  char  *filename;
+  long   line;
+  char  *function;
+} UProfObjectLocation;
+
 typedef struct _RDTSCVal
 {
   union {
@@ -170,51 +177,167 @@ uprof_context_ref (UProfContext *context)
 }
 
 void
+free_locations (GList *locations)
+{
+  GList *l;
+  for (l = locations; l != NULL; l = l->next)
+    {
+      UProfObjectLocation *location = l->data;
+      g_free (location->filename);
+      g_free (location->function);
+      g_slice_free (UProfObjectLocation, l->data);
+    }
+  g_list_free (locations);
+}
+
+void
+free_object_state_members (UProfObjectState *object)
+{
+  g_free (object->name);
+  free_locations (object->locations);
+}
+
+void
 uprof_context_unref (UProfContext *context)
 {
   context->ref--;
   if (!context->ref)
     {
+      GList *l;
       g_free (context->name);
+
+      for (l = context->counters; l != NULL; l = l->next)
+        {
+          free_object_state_members (l->data);
+          g_slice_free (UProfCounterState, l->data);
+        }
       g_list_free (context->counters);
+
+      for (l = context->timers; l != NULL; l = l->next)
+        {
+          UProfTimerState *timer = l->data;
+          free_object_state_members (l->data);
+          g_free (timer->parent_name);
+          g_slice_free (UProfTimerState, l->data);
+        }
       g_list_free (context->timers);
+
       g_free (context);
     }
+}
+
+/* A counter or timer may be accessed from multiple places in source
+ * code so we support tracking a list of locations for each uprof
+ * object. Note: we don't currently seperate statistics for each
+ * location, though that might be worth doing. */
+GList *
+add_location (GList         *locations,
+              const char    *filename,
+              unsigned long  line,
+              const char    *function)
+{
+  GList *l;
+  UProfObjectLocation *location;
+
+  for (l = locations; l != NULL; l = l->next)
+    {
+      location = l->data;
+      if (strcmp (location->filename, filename) == 0
+          && location->line == line
+          && strcmp (location->function, function) == 0)
+        return locations;
+    }
+  location = g_slice_alloc (sizeof (UProfObjectLocation));
+  location->filename = g_strdup (filename);
+  location->line = line;
+  location->function = g_strdup (function);
+  return g_list_prepend (locations, location);
+}
+
+UProfObjectState *
+find_uprof_object_state (GList *objects, const char *name)
+{
+  GList *l;
+  for (l = objects; l != NULL; l = l->next)
+    if (strcmp (((UProfObjectState *)l->data)->name, name) == 0)
+      return l->data;
+  return NULL;
+}
+
+UProfTimerState *
+find_uprof_timer_state (UProfContext *context, const char *name)
+{
+  return (UProfTimerState *)find_uprof_object_state (context->timers, name);
+}
+
+UProfCounterState *
+find_uprof_counter_state (UProfContext *context, const char *name)
+{
+  return (UProfCounterState *)find_uprof_object_state (context->counters,
+                                                       name);
 }
 
 void
 uprof_context_add_counter (UProfContext *context, UProfCounter *counter)
 {
-  /* XXX: Check if we have actually seen this counter before; it might be that
+  /* We check if we have actually seen this counter before; it might be that
    * it belongs to a dynamic shared object that has been reloaded */
-  context->counters = g_list_prepend (context->counters, counter);
+  UProfCounterState *state = find_uprof_counter_state (context, counter->name);
+  if (!state)
+    {
+      UProfObjectState *object;
+      state = g_slice_alloc0 (sizeof (UProfCounterState));
+      object = (UProfObjectState *)state;
+      object->name = g_strdup (counter->name);
+      object->locations = add_location (NULL,
+                                        counter->filename,
+                                        counter->line,
+                                        counter->function);
+      context->counters = g_list_prepend (context->counters, state);
+    }
+  counter->state = state;
 }
 
 void
 uprof_context_add_timer (UProfContext *context, UProfTimer *timer)
 {
-  /* XXX: Check if we have actually seen this counter before; it might be that
+  /* We check if we have actually seen this timer before; it might be that
    * it belongs to a dynamic shared object that has been reloaded */
-  context->timers = g_list_prepend (context->timers, timer);
+  UProfTimerState *state = find_uprof_timer_state (context, timer->name);
+  if (!state)
+    {
+      UProfObjectState *object;
+      state = g_slice_alloc0 (sizeof (UProfTimerState));
+      object = (UProfObjectState *)state;
+      object->name = g_strdup (timer->name);
+      object->locations = add_location (NULL,
+                                        timer->filename,
+                                        timer->line,
+                                        timer->function);
+      state->parent_name = g_strdup (timer->parent_name);
+      context->timers = g_list_prepend (context->timers, state);
+    }
+  timer->state = state;
 }
 
 static GList *
-find_timer_children (UProfContext *context, UProfTimer *parent)
+find_timer_children (UProfContext *context, UProfTimerState *parent)
 {
   GList *l;
   GList *children = NULL;
 
   for (l = context->timers; l != NULL; l = l->next)
     {
-      UProfTimer *timer = l->data;
-      if (timer->parent_name && strcmp (timer->parent_name, parent->name) == 0)
+      UProfTimerState *timer = l->data;
+      if (timer->parent_name &&
+          strcmp (timer->parent_name, parent->object.name) == 0)
         children = g_list_prepend (children, timer);
     }
   return children;
 }
 
 gint
-compare_timer_totals (UProfTimer *a, UProfTimer *b)
+compare_timer_totals (UProfTimerState *a, UProfTimerState *b)
 {
   if (a->total > b->total)
     return -1;
@@ -229,15 +352,15 @@ compare_timer_totals (UProfTimer *a, UProfTimer *b)
  * takes the names and resolves them to actual UProfTimer structures.
  */
 static void
-resolve_timer_heirachy (UProfContext *context,
-                        UProfTimer *timer,
-                        UProfTimer *parent)
+resolve_timer_heirachy (UProfContext    *context,
+                        UProfTimerState *timer,
+                        UProfTimerState *parent)
 {
   GList *l;
   timer->parent = parent;
   timer->children = find_timer_children (context, timer);
   for (l = timer->children; l != NULL; l = l->next)
-    resolve_timer_heirachy (context, (UProfTimer *)l->data, timer);
+    resolve_timer_heirachy (context, (UProfTimerState *)l->data, timer);
 }
 
 static void
@@ -251,8 +374,8 @@ sort_timers (UProfContext *context)
    * child heirachy (fill in timer .children, and .parent members) */
   for (l = context->timers; l != NULL; l = l->next)
     {
-      UProfTimer *timer = l->data;
-      if (timer->parent == NULL)
+      UProfTimerState *timer = l->data;
+      if (timer->parent_name == NULL)
         {
           resolve_timer_heirachy (context, timer, NULL);
           context->root_timers = g_list_prepend (context->root_timers, timer);
@@ -263,7 +386,7 @@ sort_timers (UProfContext *context)
     g_list_sort (context->root_timers, (GCompareFunc)compare_timer_totals);
   for (l = context->timers; l != NULL; l = l->next)
     {
-      UProfTimer *timer = l->data;
+      UProfTimerState *timer = l->data;
       timer->children =
         g_list_sort (timer->children, (GCompareFunc)compare_timer_totals);
     }
@@ -281,8 +404,8 @@ static const char *bars[] = {
     "█"
 };
 
-static UProfTimer *
-get_root_timer (UProfTimer *timer)
+static UProfTimerState *
+get_root_timer (UProfTimerState *timer)
 {
   while (timer->parent)
     timer = timer->parent;
@@ -291,11 +414,11 @@ get_root_timer (UProfTimer *timer)
 }
 
 static void
-print_timer_and_children (UProfContext *context,
-                          UProfTimer *timer,
-                          int indent_level)
+print_timer_and_children (UProfContext    *context,
+                          UProfTimerState *timer,
+                          int              indent_level)
 {
-  UProfTimer *root;
+  UProfTimerState *root;
   GList *l;
   float percent;
   int bar_len, indent;
@@ -310,7 +433,7 @@ print_timer_and_children (UProfContext *context,
            indent,
            "",
            REPORT_COLUMN0_WIDTH - indent,
-           timer->name,
+           timer->object.name,
            ((float)timer->total / system_counter_hz) * 1000.0,
            percent);
 
@@ -321,7 +444,9 @@ print_timer_and_children (UProfContext *context,
   g_print ("\n");
 
   for (l = timer->children; l != NULL; l = l->next)
-    print_timer_and_children (context, (UProfTimer *)l->data, indent_level + 1);
+    print_timer_and_children (context,
+                              (UProfTimerState *)l->data,
+                              indent_level + 1);
 }
 
 void
@@ -342,15 +467,15 @@ uprof_context_output_report (UProfContext *context)
   context->counters = g_list_reverse (context->counters);
   for (l = context->counters; l != NULL; l = l->next)
     {
-      UProfCounter *counter = l->data;
+      UProfCounterState *counter = l->data;
       g_print ("   %-*s%-5ld\n", REPORT_COLUMN0_WIDTH - 2,
-               counter->name, counter->count);
+               counter->object.name, counter->count);
     }
   g_print ("\n");
   g_print (" timers:\n");
   sort_timers (context);
   for (l = context->root_timers; l != NULL; l = l->next)
-    print_timer_and_children (context, (UProfTimer *)l->data, 1);
+    print_timer_and_children (context, (UProfTimerState *)l->data, 1);
 }
 
 /* Should be easy to add new probes to code, and ideally not need to
