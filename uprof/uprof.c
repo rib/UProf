@@ -293,17 +293,17 @@ get_root_timer (UProfTimer *timer)
 static void
 print_timer_and_children (UProfContext *context,
                           UProfTimer *timer,
-                          int indent)
+                          int indent_level)
 {
   UProfTimer *root;
   GList *l;
   float percent;
-  int bar_len;
+  int bar_len, indent;
 
   /* percentages are reported relative to the root timer */
   root = get_root_timer (timer);
 
-  indent += 2; /* 2 spaces per indent level */
+  indent = indent_level * 2; /* 2 spaces per indent level */
 
   percent = ((float)timer->total / (float)root->total) * 100.0;
   g_print (" %*s%-*s%-10.2f(msec), %7.3f%% ",
@@ -321,7 +321,7 @@ print_timer_and_children (UProfContext *context,
   g_print ("\n");
 
   for (l = timer->children; l != NULL; l = l->next)
-    print_timer_and_children (context, (UProfTimer *)l->data, indent + 1);
+    print_timer_and_children (context, (UProfTimer *)l->data, indent_level + 1);
 }
 
 void
