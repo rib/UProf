@@ -1,5 +1,4 @@
-SUBDIRS = uprof tests
-#SUBDIRS += doc
+SUBDIRS = uprof tests doc
 #SUBDIRS += po
 
 ACLOCAL_AMFLAGS = -I autotools/m4
