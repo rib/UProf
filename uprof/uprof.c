@@ -444,9 +444,14 @@ print_timer_and_children (UProfContext    *context,
   g_print ("\n");
 
   for (l = timer->children; l != NULL; l = l->next)
-    print_timer_and_children (context,
-                              (UProfTimerState *)l->data,
-                              indent_level + 1);
+    {
+      UProfTimerState *child = l->data;
+      if (child->count == 0)
+        continue;
+      print_timer_and_children (context,
+                                child,
+                                indent_level + 1);
+    }
 }
 
 void
@@ -468,6 +473,8 @@ uprof_context_output_report (UProfContext *context)
   for (l = context->counters; l != NULL; l = l->next)
     {
       UProfCounterState *counter = l->data;
+      if (counter->count == 0)
+        continue;
       g_print ("   %-*s%-5ld\n", REPORT_COLUMN0_WIDTH - 2,
                counter->object.name, counter->count);
     }
