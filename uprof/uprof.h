@@ -155,7 +155,7 @@ uprof_context_output_report (UProfContext *context);
  ************/
 
 /**
- * UPROF_DECLARE_COUNTER:
+ * UPROF_STATIC_COUNTER:
  * @COUNTER_SYMBOL: The name of the C symbol to declare
  * @DESCRIPTION: A string describing what the timer represents
  * @PRIV: Optional private data (unsigned long) which you can get to if you are
@@ -164,7 +164,7 @@ uprof_context_output_report (UProfContext *context);
  *
  * This can be used to declare a new static counter structure
  */
-#define UPROF_DECLARE_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV) \
+#define UPROF_STATIC_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV) \
   static UProfCounter COUNTER_SYMBOL = { \
     .name = NAME, \
     .description = DESCRIPTION, \
@@ -208,7 +208,7 @@ uprof_context_output_report (UProfContext *context);
  ************/
 
 /**
- * UPROF_DECLARE_TIMER:
+ * UPROF_STATIC_TIMER:
  * @TIMER_SYMBOL: The name of the C symbol to declare
  * @PARENT: The name of a parent timer (it should really be the name given to
  *	    the parent, not the C symbol name for the parent)
@@ -218,7 +218,7 @@ uprof_context_output_report (UProfContext *context);
  *	  application specific flags here that affect reporting.
  * This can be used to declare a new static timer structure
  */
-#define UPROF_DECLARE_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV) \
+#define UPROF_STATIC_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV) \
   static UProfTimer TIMER_SYMBOL = { \
     .name = NAME, \
     .description = DESCRIPTION, \

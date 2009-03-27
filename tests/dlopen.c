@@ -6,11 +6,11 @@
 #include <errno.h>
 #include <string.h>
 
-UPROF_DECLARE_TIMER (full_timer,
-                     NULL, /* no parent */
-                     "Full timer",
-                     "A timer for the test delays in loop0",
-                     0 /* no application private data */
+UPROF_STATIC_TIMER (full_timer,
+                    NULL, /* no parent */
+                    "Full timer",
+                    "A timer for the test delays in loop0",
+                    0 /* no application private data */
 );
 
 UProfContext *shared_context;

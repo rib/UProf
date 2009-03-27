@@ -1,16 +1,16 @@
 #include <uprof.h>
 
-UPROF_DECLARE_COUNTER (run_counter,
-                       "Run counter",
-                       "Counter how many times the module is run",
-                       0 /* no application private data */
+UPROF_STATIC_COUNTER (run_counter,
+                      "Run counter",
+                      "Counter how many times the module is run",
+                      0 /* no application private data */
 );
 
-UPROF_DECLARE_TIMER (run_timer,
-                     "Full timer", /* parent */
-                     "Run timer",
-                     "Time the running of this module",
-                     0 /* no application private data */
+UPROF_STATIC_TIMER (run_timer,
+                    "Full timer", /* parent */
+                    "Run timer",
+                    "Time the running of this module",
+                    0 /* no application private data */
 );
 
 extern UProfContext *shared_context;
