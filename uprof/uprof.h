@@ -227,15 +227,32 @@ uprof_context_output_report (UProfContext *context);
     .state = NULL \
   }
 
+#define INIT_UNSEEN_TIMER(CONTEXT, TIMER_SYMBOL) \
+  do { \
+    (TIMER_SYMBOL).filename = __FILE__; \
+    (TIMER_SYMBOL).line = __LINE__; \
+    (TIMER_SYMBOL).function = __FUNCTION__; \
+    uprof_context_add_timer (CONTEXT, &(TIMER_SYMBOL)); \
+  } while (0)
+
+#ifdef UPROF_DEBUG
+#define DEBUG_CHECK_FOR_RECURSION(CONTEXT, TIMER_SYMBOL) \
+  do { \
+    if ((TIMER_SYMBOL).state->start) \
+      { \
+        g_warning ("Recursive starting of timer (%s) unsuported!", \
+                   (TIMER_SYMBOL).name); \
+      } \
+  } while (0)
+#else
+#define DEBUG_CHECK_FOR_RECURSION(CONTEXT, TIMER_SYMBOL)
+#endif
+
 #define UPROF_TIMER_START(CONTEXT, TIMER_SYMBOL) \
   do { \
     if (!(TIMER_SYMBOL).state) \
-      { \
-	(TIMER_SYMBOL).filename = __FILE__; \
-	(TIMER_SYMBOL).line = __LINE__; \
-	(TIMER_SYMBOL).function = __FUNCTION__; \
-	uprof_context_add_timer (CONTEXT, &(TIMER_SYMBOL)); \
-      } \
+      INIT_UNSEEN_TIMER (CONTEXT, TIMER_SYMBOL); \
+    DEBUG_CHECK_FOR_RECURSION (CONTEXT, TIMER_SYMBOL); \
     (TIMER_SYMBOL).state->start = uprof_get_system_counter (); \
   } while (0)
 
@@ -244,16 +261,36 @@ uprof_context_output_report (UProfContext *context);
 
 /* XXX: We should consider system counter wrap around issues */
 
+#ifdef UPROF_DEBUG
+#define DEBUG_CHECK_TIMER_WAS_STARTED(CONTEXT, TIMER_SYMBOL) \
+  do { \
+    if (!(TIMER_SYMBOL).state->start) \
+      { \
+        g_warning ("Stopping an un-started timer! (%s)", \
+                   (TIMER_SYMBOL).name); \
+      } \
+  } while (0)
+#define DEBUG_ZERO_TIMER_START(CONTEXT, TIMER_SYMBOL) \
+  do { \
+    (TIMER_SYMBOL).state->start = 0; \
+  } while (0)
+#else
+#define DEBUG_CHECK_TIMER_WAS_STARTED(CONTEXT, TIMER_SYMBOL)
+#define DEBUG_ZERO_TIMER_START(CONTEXT, TIMER_SYMBOL)
+#endif
+
 #define UPROF_TIMER_STOP(CONTEXT, TIMER_SYMBOL) \
   do { \
     unsigned long long duration; \
     (TIMER_SYMBOL).state->count++; \
+    DEBUG_CHECK_TIMER_WAS_STARTED (CONTEXT, TIMER_SYMBOL); \
     duration = uprof_get_system_counter() - (TIMER_SYMBOL).state->start; \
     if ((duration < (TIMER_SYMBOL).state->fastest)) \
       (TIMER_SYMBOL).state->fastest = duration; \
     else if ((duration > (TIMER_SYMBOL).state->slowest)) \
       (TIMER_SYMBOL).state->slowest = duration; \
     (TIMER_SYMBOL).state->total += duration; \
+    DEBUG_ZERO_TIMER_START (CONTEXT, TIMER_SYMBOL); \
   } while (0)
 
 /* TODO: */
