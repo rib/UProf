@@ -154,6 +154,14 @@ uprof_context_output_report (UProfContext *context);
  * Counters
  ************/
 
+#define UPROF_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV) \
+  UProfCounter COUNTER_SYMBOL = { \
+    .name = NAME, \
+    .description = DESCRIPTION, \
+    .priv = (unsigned long)(PRIV), \
+    .state = NULL \
+  }
+
 /**
  * UPROF_STATIC_COUNTER:
  * @COUNTER_SYMBOL: The name of the C symbol to declare
@@ -165,12 +173,7 @@ uprof_context_output_report (UProfContext *context);
  * This can be used to declare a new static counter structure
  */
 #define UPROF_STATIC_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV) \
-  static UProfCounter COUNTER_SYMBOL = { \
-    .name = NAME, \
-    .description = DESCRIPTION, \
-    .priv = (unsigned long)(PRIV), \
-    .state = NULL \
-  }
+  static UPROF_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV)
 
 #define INIT_UNSEEN_COUNTER(CONTEXT, COUNTER_SYMBOL) \
   do { \
@@ -207,6 +210,15 @@ uprof_context_output_report (UProfContext *context);
  * Timers
  ************/
 
+#define UPROF_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV) \
+  UProfTimer TIMER_SYMBOL = { \
+    .name = NAME, \
+    .description = DESCRIPTION, \
+    .parent_name = PARENT, \
+    .priv = (unsigned long)(PRIV), \
+    .state = NULL \
+  }
+
 /**
  * UPROF_STATIC_TIMER:
  * @TIMER_SYMBOL: The name of the C symbol to declare
@@ -218,14 +230,9 @@ uprof_context_output_report (UProfContext *context);
  *	  application specific flags here that affect reporting.
  * This can be used to declare a new static timer structure
  */
+
 #define UPROF_STATIC_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV) \
-  static UProfTimer TIMER_SYMBOL = { \
-    .name = NAME, \
-    .description = DESCRIPTION, \
-    .parent_name = PARENT, \
-    .priv = (unsigned long)(PRIV), \
-    .state = NULL \
-  }
+  static UPROF_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV)
 
 #define INIT_UNSEEN_TIMER(CONTEXT, TIMER_SYMBOL) \
   do { \
