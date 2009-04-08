@@ -26,8 +26,6 @@
 
 G_BEGIN_DECLS
 
-typedef struct _UProfContext UProfContext;
-
 typedef struct _UProfCounter
 {
   /** Application defined name for counter */
@@ -70,6 +68,9 @@ typedef struct _UProfTimer
   const char *function;
 
 } UProfTimer;
+
+typedef struct _UProfCounterState UProfCounterResult;
+typedef struct _UProfTimerState   UProfTimerResult;
 
 /**
  * uprof_init:
@@ -305,6 +306,102 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_TIMER_PAUSE()
 #define UPROF_TIMER_CONTINUE()
 #endif
+
+/*
+ * Support for reporting results:
+ */
+
+typedef void (*UProfReportCallback) (UProfContext *context);
+
+void
+uprof_context_add_report_callback (UProfContext *context,
+                                   UProfReportCallback callback);
+
+void
+uprof_context_remove_report_callback (UProfContext *context,
+                                      UProfReportCallback callback);
+
+GList *
+uprof_context_get_root_timer_results (UProfContext *context);
+
+gint
+_uprof_timer_compare_total_times (UProfTimerState *a,
+                                  UProfTimerState *b,
+                                  gpointer data);
+gint
+_uprof_timer_compare_start_count (UProfTimerState *a,
+                                  UProfTimerState *b,
+                                  gpointer data);
+#define UPROF_TIMER_SORT_TIME_INC \
+  ((GCompareDataFunc)_uprof_timer_compare_total_times)
+#define UPROF_TIMER_SORT_COUNT_INC \
+  ((GCompareDataFunc)_uprof_timer_compare_start_count)
+
+gint
+_uprof_counter_compare_count (UProfCounterState *a,
+                              UProfCounterState *b,
+                              gpointer data);
+#define UPROF_COUNTER_SORT_COUNT_INC \
+  ((GCompareDataFunc)_uprof_counter_compare_count)
+
+
+typedef void (*UProfTimerResultCallback) (UProfTimerResult *timer,
+                                          gpointer          data);
+
+void
+uprof_context_foreach_timer (UProfContext            *context,
+                             GCompareDataFunc         sort_compare_func,
+                             UProfTimerResultCallback callback,
+                             gpointer                 data);
+
+
+typedef void (*UProfCounterResultCallback) (UProfCounterResult *counter,
+                                            gpointer            data);
+
+void
+uprof_context_foreach_counter (UProfContext              *context,
+                               GCompareDataFunc           sort_compare_func,
+                               UProfCounterResultCallback callback,
+                               gpointer                   data);
+
+UProfTimerResult *
+uprof_context_get_timer_result (UProfContext *context, const char *name);
+
+const char *
+uprof_timer_result_get_description (UProfTimerResult *timer);
+
+float
+uprof_timer_result_get_total_msecs (UProfTimerResult *timer);
+
+gulong
+uprof_timer_result_get_start_count (UProfTimerResult *timer);
+
+UProfTimerResult *
+uprof_timer_result_get_parent (UProfTimerResult *timer);
+
+UProfTimerResult *
+uprof_timer_result_get_root (UProfTimerResult *timer);
+
+GList *
+uprof_timer_result_get_children (UProfTimerResult *timer);
+
+const char *
+uprof_counter_result_get_name (UProfCounterResult *counter);
+
+gulong
+uprof_counter_result_get_count (UProfCounterResult *counter);
+
+void
+uprof_print_percentage_bar (float percent);
+
+typedef char * (*UProfTimerResultPrintCallback) (UProfTimerState *timer,
+                                                 guint           *fields_width,
+                                                 gpointer         data);
+
+void
+uprof_timer_result_print_and_children (UProfTimerResult              *timer,
+                                       UProfTimerResultPrintCallback  callback,
+                                       gpointer                       data);
 
 /* XXX: We should keep in mind the slightly thorny issues of handling shared
  * libraries, where various constants can dissapear as well as the timers

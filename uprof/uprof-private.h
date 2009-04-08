@@ -24,9 +24,14 @@
 
 G_BEGIN_DECLS
 
+typedef struct _UProfContext UProfContext;
+
 typedef struct _UProfObjectState
 {
+  UProfContext *context;
+
   char  *name;
+  char  *description;
   GList *locations;
 } UProfObjectState;
 
