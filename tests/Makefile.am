@@ -1,5 +1,5 @@
 
-noinst_PROGRAMS = simple dlopen
+noinst_PROGRAMS = simple suspend dlopen
 
 AM_CFLAGS = \
 	    @EXTRA_CFLAGS@ \
@@ -12,6 +12,7 @@ AM_LDFLAGS = \
 	     $(top_builddir)/uprof/libuprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@.la
 
 simple_SOURCES = simple.c
+suspend_SOURCES = suspend.c
 dlopen_SOURCES = dlopen.c
 dlopen_LDFLAGS = \
 		 -export-dynamic \

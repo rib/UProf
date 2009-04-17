@@ -33,11 +33,14 @@ typedef struct _UProfObjectState
   char  *name;
   char  *description;
   GList *locations;
+
 } UProfObjectState;
 
 typedef struct _UProfCounterState
 {
   UProfObjectState  object;
+
+  gboolean          disabled;
 
   unsigned long     count;
 
@@ -47,6 +50,8 @@ typedef struct _UProfTimerState UProfTimerState;
 struct _UProfTimerState
 {
   UProfObjectState    object;
+
+  gboolean            disabled;
 
   char               *parent_name;
 

@@ -48,8 +48,10 @@ struct _UProfContext
   char	*name;
   GList	*counters;
   GList	*timers;
-  GList *root_timers;
 
+  gboolean suspended;
+
+  GList *root_timers;
   GList *report_callbacks;
 };
 
@@ -136,7 +138,7 @@ uprof_get_system_counter (void)
    * Consider that on some multi processor machines it may be necissary to set
    * processor affinity.
    *
-   * For Core 2 Duo, or hyper threaded systems, then as I understand it the
+   * For Core 2 Duo, or hyper threaded systems, as I understand it the
    * rdtsc is driven by the system bus, and so the value is synchronized
    * accross logical cores so we don't need to worry about affinity.
    *
@@ -160,6 +162,7 @@ uprof_get_system_counter (void)
 unsigned long long
 uprof_get_system_counter_hz (void)
 {
+  uprof_calibrate_system_counter ();
   return system_counter_hz;
 }
 
@@ -295,6 +298,8 @@ uprof_context_add_counter (UProfContext *context, UProfCounter *counter)
     {
       UProfObjectState *object;
       state = g_slice_alloc0 (sizeof (UProfCounterState));
+      if (context->suspended)
+        state->disabled = 1;
       object = (UProfObjectState *)state;
       object->name = g_strdup (counter->name);
       object->description = g_strdup (counter->description);
@@ -318,6 +323,8 @@ uprof_context_add_timer (UProfContext *context, UProfTimer *timer)
     {
       UProfObjectState *object;
       state = g_slice_alloc0 (sizeof (UProfTimerState));
+      if (context->suspended)
+        state->disabled = 1;
       object = (UProfObjectState *)state;
       object->name = g_strdup (timer->name);
       object->description = g_strdup (timer->description);
@@ -325,7 +332,8 @@ uprof_context_add_timer (UProfContext *context, UProfTimer *timer)
                                         timer->filename,
                                         timer->line,
                                         timer->function);
-      state->parent_name = g_strdup (timer->parent_name);
+      if (timer->parent_name)
+        state->parent_name = g_strdup (timer->parent_name);
       context->timers = g_list_prepend (context->timers, state);
     }
   timer->state = state;
@@ -429,7 +437,7 @@ print_timer_and_children (UProfTimerResult              *timer,
            "",
            REPORT_COLUMN0_WIDTH - indent,
            timer->object.name,
-           ((float)timer->total / system_counter_hz) * 1000.0,
+           ((float)timer->total / uprof_get_system_counter_hz()) * 1000.0,
            extra_fields_width,
            extra_fields,
            percent);
@@ -584,7 +592,7 @@ uprof_timer_result_get_description (UProfTimerResult *timer)
 float
 uprof_timer_result_get_total_msecs (UProfTimerResult *timer)
 {
-  return ((float)timer->total / system_counter_hz) * 1000.0;
+  return ((float)timer->total / uprof_get_system_counter_hz()) * 1000.0;
 }
 
 gulong
@@ -705,8 +713,6 @@ uprof_context_output_report (UProfContext *context)
 {
   GList *l;
 
-  uprof_calibrate_system_counter ();
-
   uprof_context_resolve_timer_heirachy (context);
 
   if (!context->report_callbacks)
@@ -720,6 +726,51 @@ uprof_context_output_report (UProfContext *context)
       UProfReportCallback callback = l->data;
       callback (context);
     }
+}
+
+void
+uprof_suspend_context (UProfContext *context)
+{
+  GList *l;
+
+  if (context->suspended)
+    {
+      g_warning ("uprof_suspend_context calls can't be nested!\n");
+      return;
+    }
+
+  /* FIXME - how can we verify that the timer hasn't already
+   * been started? Currently we only expose debugging via a
+   * build time macro that can only affect uprof.h */
+
+  for (l = context->timers; l != NULL; l = l->next)
+    ((UProfTimerState *)l->data)->disabled++;
+
+  for (l = context->counters; l != NULL; l = l->next)
+    ((UProfCounterState *)l->data)->disabled++;
+
+  context->suspended = TRUE;
+}
+
+void
+uprof_resume_context (UProfContext *context)
+{
+  GList *l;
+
+  if (!context->suspended)
+    {
+      g_warning ("can't use uprof_resume_context with an un-suspended"
+                 "context");
+      return;
+    }
+
+  for (l = context->timers; l != NULL; l = l->next)
+    ((UProfTimerState *)l->data)->disabled--;
+
+  for (l = context->counters; l != NULL; l = l->next)
+    ((UProfCounterState *)l->data)->disabled--;
+
+  context->suspended = FALSE;
 }
 
 /* Should be easy to add new probes to code, and ideally not need to
