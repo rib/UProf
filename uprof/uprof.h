@@ -111,7 +111,7 @@ uprof_context_new (const char *name);
  *
  * Take a reference on a uprof context.
  */
-void
+UProfContext *
 uprof_context_ref (UProfContext *context);
 
 /**
@@ -149,6 +149,44 @@ uprof_context_add_counter (UProfContext *context, UProfCounter *counter);
  */
 void
 uprof_context_add_timer (UProfContext *context, UProfTimer *timer);
+
+/**
+ * uprof_context_link:
+ * @context: A UProf context
+ * @other: A UProf context whos timers and counters you want to be made
+ *         available to @context.
+ *
+ * By linking your context with another, then the timers and counters of
+ * the @other context will become in a way part of the first @context - at
+ * least as far as reporting is concerned. For example calling
+ * uprof_context_foreach_counter() would iterate all the counters
+ * of other contexts linked to the given context.
+ *
+ * This can be usefull if you are profiling a library that itself loads a
+ * DSO, but you can't export a context symbol from the library to the DSO
+ * because it happens that this DSO is also used by other libraries or
+ * applications which can't provide that symbol.
+ *
+ * The intention is to create a context that is owned by the DSO, and when we
+ * end up loading the DSO in the library we are profiling we can link that
+ * context into the real context.
+ *
+ * An example of this is profiling a DRI driver which can be loaded by X
+ * clients for direct rendering, or also by the X server for indirect
+ * rendering. If you try and export a context variable from the GL driver to
+ * the DRI driver there will end up being an unresolved symbol when the X
+ * server tries to load the driver.
+ */
+void
+uprof_context_link (UProfContext *context, UProfContext *other);
+
+/**
+ * @context: A UProf context
+ * @other: A UProf context whos timers and counters were previously made
+ *         available to @context.
+ */
+void
+uprof_context_unlink (UProfContext *context, UProfContext *other);
 
 /**
  * uprof_context_output_report:
@@ -457,11 +495,17 @@ uprof_timer_result_get_root (UProfTimerResult *timer);
 GList *
 uprof_timer_result_get_children (UProfTimerResult *timer);
 
+UProfContext *
+uprof_timer_result_get_context (UProfTimerResult *timer);
+
 const char *
 uprof_counter_result_get_name (UProfCounterResult *counter);
 
 gulong
 uprof_counter_result_get_count (UProfCounterResult *counter);
+
+UProfContext *
+uprof_counter_result_get_context (UProfCounterResult *counter);
 
 void
 uprof_print_percentage_bar (float percent);

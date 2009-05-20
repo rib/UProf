@@ -46,14 +46,18 @@ struct _UProfContext
   guint  ref;
 
   char	*name;
+
+  GList *links;
+
   GList	*counters;
   GList	*timers;
 
   gboolean suspended;
 
+  gboolean resolved;
   GList *root_timers;
-  GList *report_callbacks;
 
+  GList *report_callbacks;
   GList *report_messages;
 };
 
@@ -180,10 +184,11 @@ uprof_context_new (const char *name)
   return context;
 }
 
-void
+UProfContext *
 uprof_context_ref (UProfContext *context)
 {
   context->ref++;
+  return context;
 }
 
 void
@@ -237,6 +242,10 @@ uprof_context_unref (UProfContext *context)
       for (l = context->report_messages; l != NULL; l = l->next)
         g_free (l->data);
       g_list_free (context->report_messages);
+
+      for (l = context->links; l != NULL; l = l->next)
+        uprof_context_unref (l->data);
+      g_list_free (context->links);
 
       _uprof_all_contexts = g_list_remove (_uprof_all_contexts, context);
       g_free (context);
@@ -307,6 +316,7 @@ uprof_context_add_counter (UProfContext *context, UProfCounter *counter)
       if (context->suspended)
         state->disabled = 1;
       object = (UProfObjectState *)state;
+      object->context = context;
       object->name = g_strdup (counter->name);
       object->description = g_strdup (counter->description);
       object->locations = add_location (NULL,
@@ -332,6 +342,7 @@ uprof_context_add_timer (UProfContext *context, UProfTimer *timer)
       if (context->suspended)
         state->disabled = 1;
       object = (UProfObjectState *)state;
+      object->context = context;
       object->name = g_strdup (timer->name);
       object->description = g_strdup (timer->description);
       object->locations = add_location (NULL,
@@ -345,8 +356,48 @@ uprof_context_add_timer (UProfContext *context, UProfTimer *timer)
   timer->state = state;
 }
 
+/* If we link or unlink a context, then we need to scrap any
+ * resolved heirachies between timers etc. */
+static void
+_uprof_context_dirty_resolved_state (UProfContext *context)
+{
+  GList *l;
+
+  context->resolved = FALSE;
+
+  for (l = context->links; l != NULL; l = l->next)
+    {
+      ((UProfContext *)l->data)->resolved = FALSE;
+    }
+}
+
+void
+uprof_context_link (UProfContext *context, UProfContext *other)
+{
+  if (!g_list_find (context->links, other))
+    {
+      context->links = g_list_prepend (context->links,
+                                       uprof_context_ref (other));
+
+      _uprof_context_dirty_resolved_state (context);
+    }
+}
+
+void
+uprof_context_unlink (UProfContext *context, UProfContext *other)
+{
+  GList *l = g_list_find (context->links, other);
+  if (l)
+    {
+      uprof_context_unref (other);
+      context->links = g_list_delete_link (context->links, l);
+      _uprof_context_dirty_resolved_state (context);
+    }
+}
+
 static GList *
-find_timer_children (UProfContext *context, UProfTimerState *parent)
+find_timer_children_in_single_context (UProfContext *context,
+                                       UProfTimerState *parent)
 {
   GList *l;
   GList *children = NULL;
@@ -358,7 +409,49 @@ find_timer_children (UProfContext *context, UProfTimerState *parent)
           strcmp (timer->parent_name, parent->object.name) == 0)
         children = g_list_prepend (children, timer);
     }
+
   return children;
+}
+
+static GList *
+find_timer_children (UProfContext *context, UProfTimerState *parent)
+{
+  GList *all_children = NULL;
+  GList *children;
+  GList *l;
+
+#ifdef DEBUG_TIMER_HEIRARACHY
+  GList *l2;
+  g_print (" find_timer_children (context = %s, parent = %s):\n",
+           context->name, ((UProfObjectState *)parent)->name);
+#endif
+
+  /* NB: links allow users to combine the timers and counters from one
+   * context into another, so when searching for the children of any
+   * given timer we also need to search any linked contexts... */
+
+  children = find_timer_children_in_single_context (context, parent);
+  all_children = g_list_concat (all_children, children);
+
+#ifdef DEBUG_TIMER_HEIRARACHY
+  g_print ("  direct children of %s:\n",
+           parent ? ((UProfObjectState *)parent)->name: "NULL");
+  for (l = all_children; l != NULL; l = l->next)
+    g_print ("   name = %s\n", ((UProfObjectState *)l->data)->name);
+#endif
+
+  for (l = context->links; l != NULL; l = l->next)
+    {
+      children = find_timer_children_in_single_context (l->data, parent);
+      all_children = g_list_concat (all_children, children);
+#ifdef DEBUG_TIMER_HEIRACHY
+      g_print ("  linked children of %s:\n", ((UProfContext *)l->data)->name);
+      for (l2 = all_children; l2 != NULL; l2 = l2->next)
+        g_print ("   name = %s\n", ((UProfObjectState *)l2->data)->name);
+#endif
+    }
+
+  return all_children;
 }
 
 /*
@@ -371,8 +464,24 @@ resolve_timer_heirachy (UProfContext    *context,
                         UProfTimerState *parent)
 {
   GList *l;
+
+#ifdef DEBUG_TIMER_HEIRACHY
+  g_print ("resolve_timer_heirachy (context = %s, timer = %s, parent = %s)\n",
+           context->name,
+           ((UProfObjectState *)timer)->name,
+           parent ? ((UProfObjectState *)parent)->name : "NULL");
+#endif
+
   timer->parent = parent;
   timer->children = find_timer_children (context, timer);
+
+#ifdef DEBUG_TIMER_HEIRACHY
+  g_print ("resolved children of %s:\n",
+           timer ? ((UProfObjectState *)timer)->name: "NULL");
+  for (l = timer->children; l != NULL; l = l->next)
+    g_print ("  name = %s\n", ((UProfObjectState *)l->data)->name);
+#endif
+
   for (l = timer->children; l != NULL; l = l->next)
     resolve_timer_heirachy (context, (UProfTimerState *)l->data, timer);
 }
@@ -504,14 +613,62 @@ uprof_context_foreach_timer (UProfContext            *context,
                              gpointer                 data)
 {
   GList *l;
-  context->timers = g_list_sort_with_data (context->timers,
-                                           sort_compare_func,
-                                           data);
-  for (l = context->timers; l != NULL; l = l->next)
+  GList **timers;
+  GList *all_timers = NULL;
+
+  g_return_if_fail (context != NULL);
+  g_return_if_fail (callback != NULL);
+
+#ifdef DEBUG_TIMER_HEIRACHY
+  g_print ("uprof_context_foreach_timer (context = %s):\n",
+           context->name);
+#endif
+
+  /* If the context has been linked with other contexts, then we want
+   * a flat list of timers we can sort... */
+  /* XXX: may want a dirty flag mechanism to avoid repeating this
+   * too often! */
+  if (context->links)
     {
-      UProfTimerState *state = l->data;
-      callback (state, data);
+      all_timers = g_list_copy (context->timers);
+
+#ifdef DEBUG_TIMER_HEIRACHY
+      g_print (" all %s timers:\n", context->name);
+      for (l = all_timers; l != NULL; l = l->next)
+        g_print ("  timer->name: %s\n", ((UProfObjectState *)l->data)->name);
+#endif
+
+      for (l = context->links; l != NULL; l = l->next)
+        {
+          GList *linked_timers = ((UProfContext *)l->data)->timers;
+
+#ifdef DEBUG_TIMER_HEIRACHY
+          GList *l2;
+          g_print (" all %s timers (linked):\n", ((UProfContext *)l->data)->name);
+          for (l2 = linked_timers; l2 != NULL; l2 = l2->next)
+            g_print ("  timer->name: %s\n", ((UProfObjectState *)l2->data)->name);
+#endif
+
+          linked_timers = g_list_copy (linked_timers);
+          all_timers = g_list_concat (all_timers, linked_timers);
+        }
+      timers = &all_timers;
     }
+  else
+    timers = &context->timers;
+
+#ifdef DEBUG_TIMER_HEIRACHY
+  g_print (" all combined timers:\n");
+  for (l = *timers; l != NULL; l = l->next)
+    g_print ("  timer->name: %s\n", ((UProfObjectState *)l->data)->name);
+#endif
+
+  if (sort_compare_func)
+    *timers = g_list_sort_with_data (*timers, sort_compare_func, data);
+  for (l = *timers; l != NULL; l = l->next)
+    callback (l->data, data);
+
+  g_list_free (all_timers);
 }
 
 void
@@ -520,15 +677,37 @@ uprof_context_foreach_counter (UProfContext              *context,
                                UProfCounterResultCallback callback,
                                gpointer                   data)
 {
-  GList *l;
-  context->counters = g_list_sort_with_data (context->counters,
-                                             sort_compare_func,
-                                             data);
-  for (l = context->counters; l != NULL; l = l->next)
+  GList *l, *l2;
+  GList **counters;
+  GList *all_counters = NULL;
+
+  g_return_if_fail (context != NULL);
+  g_return_if_fail (callback != NULL);
+
+  /* If the context has been linked with other contexts, then we want
+   * a flat list of counters we can sort... */
+  /* XXX: may want a dirty flag mechanism to avoid repeating this
+   * too often! */
+  if (context->links)
     {
-      UProfCounterState *state = l->data;
-      callback (state, data);
+      all_counters = g_list_copy (context->counters);
+      for (l = context->links; l != NULL; l = l->next)
+        {
+          l2 = ((UProfContext *)l->data)->counters;
+          l2 = g_list_copy (l2);
+          all_counters = g_list_concat (all_counters, l2);
+        }
+      counters = &all_counters;
     }
+  else
+    counters = &context->counters;
+
+  if (sort_compare_func)
+    *counters = g_list_sort_with_data (*counters, sort_compare_func, data);
+  for (l = *counters; l != NULL; l = l->next)
+    callback (l->data, data);
+
+  g_list_free (all_counters);
 }
 
 UProfContext *
@@ -628,6 +807,12 @@ uprof_timer_result_get_children (UProfTimerResult *timer)
   return g_list_copy (timer->children);
 }
 
+UProfContext *
+uprof_timer_result_get_context (UProfTimerResult *timer)
+{
+  return timer->object.context;
+}
+
 const char *
 uprof_counter_result_get_name (UProfCounterResult *counter)
 {
@@ -638,6 +823,12 @@ gulong
 uprof_counter_result_get_count (UProfCounterResult *counter)
 {
   return counter->count;
+}
+
+UProfContext *
+uprof_counter_result_get_context (UProfCounterResult *counter)
+{
+  return counter->object.context;
 }
 
 void
@@ -672,7 +863,7 @@ default_print_counter (UProfCounterResult *counter,
 static void
 default_report_context (UProfContext *context)
 {
-  GList *l;
+  GList *l, *l2;
 
   g_print (" context: %s\n", context->name);
   g_print ("\n");
@@ -686,26 +877,100 @@ default_report_context (UProfContext *context)
   /* FIXME: Re-implement using the public uprof API... */
   g_print ("\n");
   g_print (" timers:\n");
+  g_assert (context->resolved);
   for (l = context->root_timers; l != NULL; l = l->next)
-    uprof_timer_result_print_and_children ((UProfTimerResult *)l->data, NULL, NULL);
+    {
+      uprof_timer_result_print_and_children ((UProfTimerResult *)l->data,
+                                             NULL, NULL);
+    }
+
+  for (l = context->links; l != NULL; l = l->next)
+    for (l2 = ((UProfContext *)l->data)->root_timers;
+         l2 != NULL;
+         l2 = l2->next)
+      {
+        uprof_timer_result_print_and_children ((UProfTimerResult *)l2->data,
+                                               NULL, NULL);
+      }
 }
+
+static void
+resolve_timer_heirachy_cb (UProfTimerResult *timer, void *data)
+{
+  UProfContext *context = data;
+  if (timer->parent_name == NULL)
+    {
+      resolve_timer_heirachy (context, timer, NULL);
+      context->root_timers = g_list_prepend (context->root_timers, timer);
+    }
+}
+
+#ifdef DEBUG_TIMER_HEIRARACHY
+static void
+print_timer_recursive (UProfTimerResult *timer, int indent)
+{
+  UProfContext *context = uprof_timer_result_get_context (timer);
+  GList *l;
+
+  g_print ("%*scontext = %s, timer = %s, parent_name = %s, "
+           "parent = %s\n",
+           2 * indent, "",
+           context->name,
+           timer->object.name,
+           timer->parent_name,
+           timer->parent ? timer->parent->object.name : "NULL");
+  for (l = timer->children; l != NULL; l = l->next)
+    {
+      UProfTimerResult *child = l->data;
+      g_print ("%*schild = %s\n",
+               2 * indent, "",
+               child->object.name);
+    }
+
+  indent++;
+  for (l = timer->children; l != NULL; l = l->next)
+    print_timer_recursive (l->data, indent);
+}
+
+static void
+print_timer_heirachy_cb (UProfTimerResult *timer, void *data)
+{
+  if (timer->parent == NULL)
+    print_timer_recursive (timer, 0);
+}
+#endif
 
 static void
 uprof_context_resolve_timer_heirachy (UProfContext *context)
 {
+#ifdef DEBUG_TIMER_HEIRARACHY
   GList *l;
+#endif
+
+  if (context->resolved)
+    return;
+
+  g_assert (context->root_timers == NULL);
 
   /* Use the parent names of timers to resolve the actual parent
-   * child heirachy (fill in timer .children, and .parent members) */
-  for (l = context->timers; l != NULL; l = l->next)
-    {
-      UProfTimerState *timer = l->data;
-      if (timer->parent_name == NULL)
-        {
-          resolve_timer_heirachy (context, timer, NULL);
-          context->root_timers = g_list_prepend (context->root_timers, timer);
-        }
-    }
+   * child hierarchy (fill in timer .children, and .parent members) */
+  uprof_context_foreach_timer (context,
+                               NULL, /* no need to sort */
+                               resolve_timer_heirachy_cb,
+                               context);
+
+#ifdef DEBUG_TIMER_HEIRARACHY
+  g_print ("resolved root_timers:\n");
+  for (l = context->root_timers; l != NULL; l = l->next)
+    g_print (" name = %s\n", ((UProfObjectState *)l->data)->name);
+
+  uprof_context_foreach_timer (context,
+                               NULL, /* no need to sort */
+                               print_timer_heirachy_cb,
+                               context);
+#endif
+
+  context->resolved = TRUE;
 }
 
 GList *
@@ -734,8 +999,8 @@ uprof_context_output_report (UProfContext *context)
     }
 }
 
-void
-uprof_suspend_context (UProfContext *context)
+static void
+_uprof_suspend_single_context (UProfContext *context)
 {
   GList *l;
 
@@ -759,7 +1024,18 @@ uprof_suspend_context (UProfContext *context)
 }
 
 void
-uprof_resume_context (UProfContext *context)
+uprof_suspend_context (UProfContext *context)
+{
+  GList *l;
+
+  _uprof_suspend_single_context (context);
+
+  for (l = context->links; l != NULL; l = l->next)
+    _uprof_suspend_single_context (l->data);
+}
+
+static void
+_uprof_resume_single_context (UProfContext *context)
 {
   GList *l;
 
@@ -777,6 +1053,17 @@ uprof_resume_context (UProfContext *context)
     ((UProfCounterState *)l->data)->disabled--;
 
   context->suspended = FALSE;
+}
+
+void
+uprof_resume_context (UProfContext *context)
+{
+  GList *l;
+
+  _uprof_resume_single_context (context);
+
+  for (l = context->links; l != NULL; l = l->next)
+    _uprof_resume_single_context (l->data);
 }
 
 void
@@ -808,7 +1095,7 @@ uprof_context_get_messages (UProfContext *context)
  *
  * Should support simple counters
  * Should support summing the total time spent between start/stop delimiters
- * Should support heirachical timers; such that more fine grained timers
+ * Should support hierarchical timers; such that more fine grained timers
  * may be be easily enabled/disabled.
  *
  * Reports should support XML
