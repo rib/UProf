@@ -53,6 +53,8 @@ struct _UProfContext
 
   GList *root_timers;
   GList *report_callbacks;
+
+  GList *report_messages;
 };
 
 typedef struct _UProfObjectLocation
@@ -231,6 +233,10 @@ uprof_context_unref (UProfContext *context)
           g_slice_free (UProfTimerState, l->data);
         }
       g_list_free (context->timers);
+
+      for (l = context->report_messages; l != NULL; l = l->next)
+        g_free (l->data);
+      g_list_free (context->report_messages);
 
       _uprof_all_contexts = g_list_remove (_uprof_all_contexts, context);
       g_free (context);
@@ -771,6 +777,30 @@ uprof_resume_context (UProfContext *context)
     ((UProfCounterState *)l->data)->disabled--;
 
   context->suspended = FALSE;
+}
+
+void
+uprof_context_add_report_message (UProfContext *context,
+                                  const char *format, ...)
+{
+  va_list ap;
+  char *report_message;
+
+  va_start (ap, format);
+  report_message = g_strdup_vprintf (format, ap);
+  va_end (ap);
+
+  context->report_messages = g_list_prepend (context->report_messages,
+                                             report_message);
+}
+
+GList *
+uprof_context_get_messages (UProfContext *context)
+{
+  GList *l = g_list_copy (context->report_messages);
+  for (; l != NULL; l = l->next)
+    l->data = g_strdup (l->data);
+  return l;
 }
 
 /* Should be easy to add new probes to code, and ideally not need to

@@ -329,6 +329,18 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_TIMER_CONTINUE()
 #endif
 
+/**
+ * uprof_context_add_report_warning:
+ * @context: A uprof context
+ * @format: A printf style format string
+ *
+ * This function queues a message to be output when uprof generates its
+ * final report.
+ */
+void
+uprof_context_add_report_message (UProfContext *context,
+                                  const char *format, ...);
+
 void
 uprof_suspend_context (UProfContext *context);
 
@@ -430,6 +442,9 @@ void
 uprof_timer_result_print_and_children (UProfTimerResult              *timer,
                                        UProfTimerResultPrintCallback  callback,
                                        gpointer                       data);
+
+GList *
+uprof_context_get_messages (UProfContext *context);
 
 /* XXX: We should keep in mind the slightly thorny issues of handling shared
  * libraries, where various constants can dissapear as well as the timers
