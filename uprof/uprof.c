@@ -17,6 +17,13 @@
  * along with UProf.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define USE_RDTSC
+
+#ifndef __i386__
+#undef USE_RDTSC
+#endif
+//#undef USE_RDTSC
+
 #include <uprof.h>
 
 #include <stdio.h>
@@ -26,6 +33,9 @@
 #include <errno.h>
 #include <string.h>
 #include <glib/gprintf.h>
+#ifndef USE_RDTSC
+#include <time.h>
+#endif
 
 #define UPROF_DEBUG     1
 
@@ -75,17 +85,41 @@ typedef struct _RDTSCVal
           uint32_t low;
           uint32_t hi;
       } split;
-      unsigned long long full_value;
+      uint64_t full_value;
   } u;
 } RDTSCVal;
 
 static unsigned long long system_counter_hz;
 static GList *_uprof_all_contexts;
+#ifndef USE_RDTSC
+static clockid_t clockid;
+#endif
 
 void
 uprof_init (int *argc, char ***argv)
 {
+#ifndef USE_RDTSC
+  int ret;
+  struct timespec ts;
 
+  ret = clock_getcpuclockid(0, &clockid);
+  if (ret == ENOENT)
+    {
+      g_warning ("Using the CPU clock will be unreliable on this system if "
+                 "you don't assure processor affinity");
+    }
+  else if (ret != 0)
+    {
+      const char *str = strerror (errno);
+      g_warning ("Failed to get CPU clock ID: %s", str);
+    }
+
+  if (clock_gettime (CLOCK_PROCESS_CPUTIME_ID, &ts) == -1)
+    {
+      const char *str = strerror (errno);
+      g_warning ("Failed to query CLOCK_PROCESS_CPUTIME_ID clock: %s", str);
+    }
+#endif
 }
 
 static void
@@ -134,19 +168,19 @@ uprof_calibrate_system_counter (void)
   DBG_PRINTF ("System Counter HZ: %llu\n", system_counter_hz);
 }
 
-unsigned long long
+uint64_t
 uprof_get_system_counter (void)
 {
-#if __i386__
+#ifdef USE_RDTSC
   RDTSCVal rdtsc;
 
   /* XXX:
-   * Consider that on some multi processor machines it may be necissary to set
+   * Consider that on some multi processor machines it may be necessary to set
    * processor affinity.
    *
    * For Core 2 Duo, or hyper threaded systems, as I understand it the
    * rdtsc is driven by the system bus, and so the value is synchronized
-   * accross logical cores so we don't need to worry about affinity.
+   * across logical cores so we don't need to worry about affinity.
    *
    * Also since rdtsc is driven by the system bus, unlike the "Non-Sleep Clock
    * Ticks" counter it isn't affected by the processor going into power saving
@@ -158,10 +192,24 @@ uprof_get_system_counter (void)
        : /* input */
        : "%edx", "%eax");
 
+  //g_print ("counter = %llu\n", (unsigned long long)rdtsc.u.full_value);
   return rdtsc.u.full_value;
 #else
-  /* XXX: implement gettimeofday() based fallback */
-#error "System currently not supported by uprof"
+  struct timespec ts;
+  uint64_t ret;
+
+  //clock_gettime (clockid, &ts);
+  clock_gettime (CLOCK_MONOTONIC, &ts);
+
+  ret = ts.tv_sec;
+  ret *= 1000000000;
+  ret += ts.tv_nsec;
+
+#if 0
+  g_print ("counter = %llu\n", (unsigned long long)ret);
+#endif
+
+  return ret;
 #endif
 }
 
