@@ -1,5 +1,5 @@
 
-noinst_PROGRAMS = simple suspend dlopen
+noinst_PROGRAMS = simple suspend dlopen recursion
 
 AM_CFLAGS = \
 	    @EXTRA_CFLAGS@ \

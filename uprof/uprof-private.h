@@ -52,6 +52,7 @@ struct _UProfTimerState
   UProfObjectState    object;
 
   gboolean            disabled;
+  int                 recursion;
 
   char               *parent_name;
 
