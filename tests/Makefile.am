@@ -1,5 +1,5 @@
 
-noinst_PROGRAMS = simple suspend dlopen recursion linking
+noinst_PROGRAMS = simple suspend dlopen recursion linking sanity_check
 
 AM_CFLAGS = \
 	    @EXTRA_CFLAGS@ \
