@@ -223,7 +223,8 @@ uprof_context_unref (UProfContext *context)
         {
           UProfTimerState *timer = l->data;
           free_object_state_members (l->data);
-          g_free (timer->parent_name);
+          if (timer->parent && timer->parent_name)
+            g_free (timer->parent_name);
           g_slice_free (UProfTimerState, l->data);
         }
       g_list_free (context->timers);
