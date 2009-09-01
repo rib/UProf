@@ -125,6 +125,16 @@ void
 uprof_context_unref (UProfContext *context);
 
 /**
+ * uprof_find_context:
+ * @name: Find an existing uprof context by name
+ *
+ * This function looks for a context by name which - for example - may
+ * then be passed to uprof_context_link.
+ */
+UProfContext *
+uprof_find_context (const char *name);
+
+/**
  * uprof_context_add_counter:
  * @context: A UProf context
  * FIXME
