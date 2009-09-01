@@ -36,6 +36,7 @@
 #ifndef USE_RDTSC
 #include <time.h>
 #endif
+#include <unistd.h>
 
 #define UPROF_DEBUG     1
 
@@ -89,7 +90,7 @@ typedef struct _RDTSCVal
   } u;
 } RDTSCVal;
 
-static unsigned long long system_counter_hz;
+static uint64_t system_counter_hz;
 static GList *_uprof_all_contexts;
 #ifndef USE_RDTSC
 static clockid_t clockid;
@@ -125,9 +126,8 @@ uprof_init (int *argc, char ***argv)
 static void
 uprof_calibrate_system_counter (void)
 {
-  unsigned long long time0, time1 = 0;
-  struct timespec delay;
-  unsigned long long diff;
+  uint64_t time0, time1 = 0;
+  uint64_t diff;
 
   if (system_counter_hz)
     return;
@@ -137,8 +137,9 @@ uprof_calibrate_system_counter (void)
 
   while (1)
     {
+      struct timespec delay;
       time0 = uprof_get_system_counter ();
-      delay.tv_sec = 0;
+      delay.tv_nsec = 0;
       delay.tv_nsec = 1000000000/4;
       if (nanosleep (&delay, NULL) == -1)
         {
@@ -158,6 +159,7 @@ uprof_calibrate_system_counter (void)
    * a number of components with individual uprof profiling contexts don't
    * all need to incur a callibration delay. */
 
+  g_assert (time1 > time0);
   diff = time1 - time0;
   system_counter_hz = diff * 4;
 
@@ -186,34 +188,36 @@ uprof_get_system_counter (void)
    * Ticks" counter it isn't affected by the processor going into power saving
    * states, which may happen as the processor goes idle waiting for IO.
    */
-
   asm ("rdtsc; movl %%edx,%0; movl %%eax,%1"
        : "=r" (rdtsc.u.split.hi), "=r" (rdtsc.u.split.low)
        : /* input */
        : "%edx", "%eax");
 
-  //g_print ("counter = %llu\n", (unsigned long long)rdtsc.u.full_value);
+  /* g_print ("counter = %llu\n", (uint64_t)rdtsc.u.full_value); */
   return rdtsc.u.full_value;
 #else
   struct timespec ts;
   uint64_t ret;
 
-  //clock_gettime (clockid, &ts);
+#if 0
+  /* XXX: Seems very unreliable compared to simply using rdtsc asm () as above
+   */
+  clock_gettime (clockid, &ts);
+#else
   clock_gettime (CLOCK_MONOTONIC, &ts);
+#endif
 
   ret = ts.tv_sec;
   ret *= 1000000000;
   ret += ts.tv_nsec;
 
-#if 0
-  g_print ("counter = %llu\n", (unsigned long long)ret);
-#endif
+  /* g_print ("counter = %llu\n", (uint64_t)ret); */
 
   return ret;
 #endif
 }
 
-unsigned long long
+uint64_t
 uprof_get_system_counter_hz (void)
 {
   uprof_calibrate_system_counter ();
