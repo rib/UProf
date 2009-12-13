@@ -53,6 +53,22 @@
 #endif
 #define REPORT_COLUMN0_WIDTH 40
 
+#define UPROF_OBJECT_STATE(X) ((UProfObjectState *)X)
+
+typedef struct _UProfTimerAttribute
+{
+  char *name;
+  UProfTimersAttributeReportCallback callback;
+  void *user_data;
+} UProfTimerAttribute;
+
+typedef struct _UProfCounterAttribute
+{
+  char *name;
+  UProfCountersAttributeReportCallback callback;
+  void *user_data;
+} UProfCounterAttribute;
+
 struct _UProfContext
 {
   guint  ref;
@@ -71,6 +87,9 @@ struct _UProfContext
 
   GList *report_callbacks;
   GList *report_messages;
+
+  GList *timer_attributes;
+  GList *counter_attributes;
 };
 
 typedef struct _UProfObjectLocation
@@ -445,6 +464,39 @@ uprof_context_unlink (UProfContext *context, UProfContext *other)
       uprof_context_unref (other);
       context->links = g_list_delete_link (context->links, l);
       _uprof_context_dirty_resolved_state (context);
+    }
+}
+
+void
+uprof_context_add_timers_attribute (UProfContext *context,
+                                    const char *attribute_name,
+                                    UProfTimersAttributeReportCallback callback,
+                                    void *user_data)
+{
+  UProfTimerAttribute *attribute = g_slice_new (UProfTimerAttribute);
+  attribute->name = g_strdup (attribute_name);
+  attribute->callback = callback;
+  attribute->user_data = user_data;
+  context->timer_attributes =
+    g_list_prepend (context->timer_attributes, attribute);
+}
+
+void
+uprof_context_remove_timers_attribute (UProfContext *context,
+                                       const char *attribute_name)
+{
+  GList *l;
+  for (l = context->timer_attributes; l; l = l->next)
+    {
+      UProfTimerAttribute *attribute = l->data;
+      if (strcmp (attribute->name, attribute_name) == 0)
+        {
+          g_free (attribute->name);
+          g_slice_free (UProfTimerAttribute, attribute);
+          context->timer_attributes =
+            g_list_delete_link (context->timer_attributes, l);
+          return;
+        }
     }
 }
 

@@ -73,6 +73,9 @@ typedef struct _UProfTimer
 typedef struct _UProfCounterState UProfCounterResult;
 typedef struct _UProfTimerState   UProfTimerResult;
 
+typedef char *(*UProfTimersAttributeReportCallback) (UProfTimerResult *result);
+typedef char *(*UProfCountersAttributeReportCallback) (UProfCounterResult *result);
+
 /**
  * uprof_init:
  * FIXME
@@ -199,7 +202,6 @@ uprof_context_unlink (UProfContext *context, UProfContext *other);
 void
 uprof_context_output_report (UProfContext *context);
 
-
 /************
  * Counters
  ************/
@@ -259,6 +261,35 @@ uprof_context_output_report (UProfContext *context);
       break; \
     (COUNTER_SYMBOL).state->count = 0; \
   } while (0)
+
+/**
+ * uprof_context_add_counters_attribute:
+ * @context: A UProf context
+ * @attribute_name: The name of the attribute
+ * @callback: A function called for each counter being reported
+ *
+ * Adds a custom attribute to reports of counter statistics. The attribute name
+ * can be wrapped with newline characters and the callback functions will be
+ * called once for each timer being reported via a call to
+ * uprof_context_output_report()
+ */
+void
+uprof_context_add_counters_attribute (UProfContext *context,
+                                      const char *attribute_name,
+                                      UProfCountersAttributeReportCallback callback,
+                                      void *user_data);
+
+/**
+ * uprof_context_remove_counters_attribute:
+ * @context: A UProf context
+ * @id: The custom report column you want to remove
+ *
+ * Removes the custom counters @attribute from future reports generated
+ * with uprof_context_output_report()
+ */
+void
+uprof_context_remove_counters_attribute (UProfContext *context,
+                                         const char *attribute_name);
 
 
 
@@ -399,6 +430,37 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_TIMER_PAUSE()
 #define UPROF_TIMER_CONTINUE()
 #endif
+
+/**
+ * uprof_context_add_timers_attribute:
+ * @context: A UProf context
+ * @attribute_name: The name of the attribute
+ * @callback: A function called for each timer being reported
+ *
+ * Adds a custom attribute to reports of timer statistics. The attribute name
+ * can be wrapped with newline characters and the callback functions will be
+ * called once for each timer being reported via a call to
+ * uprof_context_output_report()
+ */
+void
+uprof_context_add_timers_attribute (UProfContext *context,
+                                    const char *attribute_name,
+                                    UProfTimersAttributeReportCallback callback,
+                                    void *user_data);
+
+/**
+ * uprof_context_remove_timers_attribute:
+ * @context: A UProf context
+ * @id: The custom report column you want to remove
+ *
+ * Removes the custom timers @attribute from future reports generated with
+ * uprof_context_output_report()
+ */
+void
+uprof_context_remove_timers_attribute (UProfContext *context,
+                                       const char *attribute_name);
+
+
 
 /**
  * uprof_context_add_report_warning:
