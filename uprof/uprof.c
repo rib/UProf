@@ -99,6 +99,11 @@ typedef struct _UProfObjectLocation
   char  *function;
 } UProfObjectLocation;
 
+typedef struct _UProfReport
+{
+  int max_timer_name_size;
+} UProfReport;
+
 typedef struct _RDTSCVal
 {
   union {
@@ -623,8 +628,29 @@ uprof_print_percentage_bar (float percent)
   g_print ("%*s", (45 - bar_char_len), "");
 }
 
+static int
+get_name_size_for_timer_and_children (UProfTimerResult *timer,
+                                      int indent_level)
+{
+  int max_name_size =
+    (indent_level * 2) + strlen (UPROF_OBJECT_STATE (timer)->name);
+  GList *l;
+
+  for (l = timer->children; l; l = l->next)
+    {
+      UProfTimerResult *child = l->data;
+      int child_name_size =
+        get_name_size_for_timer_and_children (child, indent_level + 1);
+      if (child_name_size > max_name_size)
+        max_name_size = child_name_size;
+    }
+
+  return max_name_size;
+}
+
 static void
-print_timer_and_children (UProfTimerResult              *timer,
+print_timer_and_children (UProfReport                   *report,
+                          UProfTimerResult              *timer,
                           UProfTimerResultPrintCallback  callback,
                           int                            indent_level,
                           gpointer                       data)
@@ -655,7 +681,7 @@ print_timer_and_children (UProfTimerResult              *timer,
   g_print (" %*s%-*s%-10.2f  %*s %7.3f%% ",
            indent,
            "",
-           REPORT_COLUMN0_WIDTH - indent,
+           report->max_timer_name_size + 1 - indent,
            timer->object.name,
            ((float)timer->total / uprof_get_system_counter_hz()) * 1000.0,
            extra_fields_width,
@@ -675,7 +701,8 @@ print_timer_and_children (UProfTimerResult              *timer,
       if (child->count == 0)
         continue;
 
-      print_timer_and_children (child,
+      print_timer_and_children (report,
+                                child,
                                 callback,
                                 indent_level + 1,
                                 data);
@@ -692,14 +719,19 @@ uprof_timer_result_print_and_children (UProfTimerResult              *timer,
 {
   char *extra_titles = NULL;
   guint extra_titles_width = 0;
+  UProfReport *report;
 
   if (callback)
     extra_titles = callback (NULL, &extra_titles_width, data);
   if (!extra_titles)
     extra_titles = g_strdup ("");
 
+  report = g_new0 (UProfReport, 1);
+  report->max_timer_name_size =
+    get_name_size_for_timer_and_children (timer, 0);
+
   g_print (" %-*s%s %*s %s\n",
-           REPORT_COLUMN0_WIDTH,
+           report->max_timer_name_size + 1,
            "Name",
            "Total msecs",
            extra_titles_width,
@@ -708,7 +740,8 @@ uprof_timer_result_print_and_children (UProfTimerResult              *timer,
 
   g_free (extra_titles);
 
-  print_timer_and_children (timer, callback, 0, data);
+  print_timer_and_children (report, timer, callback, 0, data);
+  g_free (report);
 }
 
 void
