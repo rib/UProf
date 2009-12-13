@@ -968,7 +968,8 @@ default_print_counter (UProfCounterResult *counter,
 static void
 default_report_context (UProfContext *context)
 {
-  GList *l, *l2;
+  GList *root_timers;
+  GList *l;
 
   g_print (" context: %s\n", context->name);
   g_print ("\n");
@@ -979,24 +980,13 @@ default_report_context (UProfContext *context)
                                  default_print_counter,
                                  NULL);
 
-  /* FIXME: Re-implement using the public uprof API... */
   g_print ("\n");
   g_print (" timers:\n");
   g_assert (context->resolved);
+  root_timers = uprof_context_get_root_timer_results (context);
   for (l = context->root_timers; l != NULL; l = l->next)
-    {
-      uprof_timer_result_print_and_children ((UProfTimerResult *)l->data,
-                                             NULL, NULL);
-    }
-
-  for (l = context->links; l != NULL; l = l->next)
-    for (l2 = ((UProfContext *)l->data)->root_timers;
-         l2 != NULL;
-         l2 = l2->next)
-      {
-        uprof_timer_result_print_and_children ((UProfTimerResult *)l2->data,
-                                               NULL, NULL);
-      }
+    uprof_timer_result_print_and_children ((UProfTimerResult *)l->data,
+                                           NULL, NULL);
 }
 
 static void
