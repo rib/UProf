@@ -39,7 +39,7 @@
 #endif
 #include <unistd.h>
 
-#define UPROF_DEBUG     1
+/* #define UPROF_DEBUG     1 */
 
 #ifdef UPROF_DEBUG
 #define DBG_PRINTF(fmt, args...)              \
