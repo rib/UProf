@@ -326,7 +326,7 @@ uprof_context_unref (UProfContext *context)
 
 /* A counter or timer may be accessed from multiple places in source
  * code so we support tracking a list of locations for each uprof
- * object. Note: we don't currently seperate statistics for each
+ * object. Note: we don't currently separate statistics for each
  * location, though that might be worth doing. */
 GList *
 add_location (GList         *locations,
