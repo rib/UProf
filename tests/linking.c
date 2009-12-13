@@ -67,6 +67,7 @@ UPROF_STATIC_TIMER (loop1_sub_timer,
 int
 main (int argc, char **argv)
 {
+  UProfReport *report;
   UProfContext *context0;
   UProfContext *context1;
   int i;
@@ -132,7 +133,10 @@ main (int argc, char **argv)
   UPROF_TIMER_STOP (context0, full_timer);
 
   uprof_context_link (context0, context1);
-  uprof_context_output_report (context0);
+  report = uprof_report_new ("Linking report");
+  uprof_report_add_context (report, context0);
+  uprof_report_print (report);
+  uprof_report_unref (report);
 
   uprof_context_unref (context0);
   uprof_context_unref (context1);

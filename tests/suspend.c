@@ -32,6 +32,7 @@ UPROF_STATIC_COUNTER (loop_counter,
 int
 main (int argc, char **argv)
 {
+  UProfReport *report;
   UProfContext *context;
   int i;
 
@@ -71,7 +72,10 @@ main (int argc, char **argv)
 
   DBG_PRINTF ("Expected result = 2 seconds accounted for and count == 2:\n");
 
-  uprof_context_output_report (context);
+  report = uprof_report_new ("Suspend report");
+  uprof_report_add_context (report, context);
+  uprof_report_print (report);
+  uprof_report_unref (report);
 
   uprof_context_unref (context);
 

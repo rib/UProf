@@ -36,6 +36,8 @@ load_and_run_module ()
 int
 main (int argc, char **argv)
 {
+  UProfReport *report;
+
   uprof_init (&argc, &argv);
 
   shared_context = uprof_context_new ("Simple context");
@@ -49,7 +51,11 @@ main (int argc, char **argv)
   printf ("stop full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
   UPROF_TIMER_STOP (shared_context, full_timer);
 
-  uprof_context_output_report (shared_context);
+  report = uprof_report_new ("dlopen report");
+  uprof_report_add_context (report, shared_context);
+  uprof_report_print (report);
+  uprof_report_unref (report);
+
 
   uprof_context_unref (shared_context);
 

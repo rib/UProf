@@ -58,14 +58,14 @@
 typedef struct _UProfTimerAttribute
 {
   char *name;
-  UProfTimersAttributeReportCallback callback;
+  UProfReportTimersAttributeCallback callback;
   void *user_data;
 } UProfTimerAttribute;
 
 typedef struct _UProfCounterAttribute
 {
   char *name;
-  UProfCountersAttributeReportCallback callback;
+  UProfReportCountersAttributeCallback callback;
   void *user_data;
 } UProfCounterAttribute;
 
@@ -85,11 +85,7 @@ struct _UProfContext
   gboolean resolved;
   GList *root_timers;
 
-  GList *report_callbacks;
   GList *report_messages;
-
-  GList *timer_attributes;
-  GList *counter_attributes;
 };
 
 typedef struct _UProfObjectLocation
@@ -99,10 +95,17 @@ typedef struct _UProfObjectLocation
   char  *function;
 } UProfObjectLocation;
 
-typedef struct _UProfReport
+struct _UProfReport
 {
+  int ref;
+  GList *contexts;
+  GList *context_callbacks;
+
+  GList *timer_attributes;
+  GList *counter_attributes;
+
   int max_timer_name_size;
-} UProfReport;
+};
 
 typedef struct _RDTSCVal
 {
@@ -380,6 +383,22 @@ find_uprof_counter_state (UProfContext *context, const char *name)
                                                        name);
 }
 
+/* If we add timers or counters or link or unlink a
+ * context, then we need to scrap any resolved hierarchies
+ * between timers etc. */
+static void
+_uprof_context_dirty_resolved_state (UProfContext *context)
+{
+  GList *l;
+
+  context->resolved = FALSE;
+
+  for (l = context->links; l != NULL; l = l->next)
+    {
+      ((UProfContext *)l->data)->resolved = FALSE;
+    }
+}
+
 void
 uprof_context_add_counter (UProfContext *context, UProfCounter *counter)
 {
@@ -403,6 +422,7 @@ uprof_context_add_counter (UProfContext *context, UProfCounter *counter)
       context->counters = g_list_prepend (context->counters, state);
     }
   counter->state = state;
+  _uprof_context_dirty_resolved_state (context);
 }
 
 void
@@ -431,21 +451,7 @@ uprof_context_add_timer (UProfContext *context, UProfTimer *timer)
       context->timers = g_list_prepend (context->timers, state);
     }
   timer->state = state;
-}
-
-/* If we link or unlink a context, then we need to scrap any
- * resolved heirachies between timers etc. */
-static void
-_uprof_context_dirty_resolved_state (UProfContext *context)
-{
-  GList *l;
-
-  context->resolved = FALSE;
-
-  for (l = context->links; l != NULL; l = l->next)
-    {
-      ((UProfContext *)l->data)->resolved = FALSE;
-    }
+  _uprof_context_dirty_resolved_state (context);
 }
 
 void
@@ -469,39 +475,6 @@ uprof_context_unlink (UProfContext *context, UProfContext *other)
       uprof_context_unref (other);
       context->links = g_list_delete_link (context->links, l);
       _uprof_context_dirty_resolved_state (context);
-    }
-}
-
-void
-uprof_context_add_timers_attribute (UProfContext *context,
-                                    const char *attribute_name,
-                                    UProfTimersAttributeReportCallback callback,
-                                    void *user_data)
-{
-  UProfTimerAttribute *attribute = g_slice_new (UProfTimerAttribute);
-  attribute->name = g_strdup (attribute_name);
-  attribute->callback = callback;
-  attribute->user_data = user_data;
-  context->timer_attributes =
-    g_list_prepend (context->timer_attributes, attribute);
-}
-
-void
-uprof_context_remove_timers_attribute (UProfContext *context,
-                                       const char *attribute_name)
-{
-  GList *l;
-  for (l = context->timer_attributes; l; l = l->next)
-    {
-      UProfTimerAttribute *attribute = l->data;
-      if (strcmp (attribute->name, attribute_name) == 0)
-        {
-          g_free (attribute->name);
-          g_slice_free (UProfTimerAttribute, attribute);
-          context->timer_attributes =
-            g_list_delete_link (context->timer_attributes, l);
-          return;
-        }
     }
 }
 
@@ -969,59 +942,6 @@ uprof_counter_result_get_context (UProfCounterResult *counter)
   return counter->object.context;
 }
 
-void
-uprof_context_add_report_callback (UProfContext *context,
-                                   UProfReportCallback callback)
-{
-  context->report_callbacks =
-    g_list_prepend (context->report_callbacks, callback);
-}
-
-void
-uprof_context_remove_report_callback (UProfContext *context,
-                                      UProfReportCallback callback)
-{
-  context->report_callbacks =
-    g_list_remove (context->report_callbacks, callback);
-}
-
-static void
-default_print_counter (UProfCounterResult *counter,
-                       gpointer            data)
-{
-  gulong count = uprof_counter_result_get_count (counter);
-  if (count == 0)
-    return;
-
-  g_print ("   %-*s%-5ld\n", REPORT_COLUMN0_WIDTH - 2,
-           uprof_counter_result_get_name (counter),
-           uprof_counter_result_get_count (counter));
-}
-
-static void
-default_report_context (UProfContext *context)
-{
-  GList *root_timers;
-  GList *l;
-
-  g_print (" context: %s\n", context->name);
-  g_print ("\n");
-  g_print (" counters:\n");
-
-  uprof_context_foreach_counter (context,
-                                 UPROF_COUNTER_SORT_COUNT_INC,
-                                 default_print_counter,
-                                 NULL);
-
-  g_print ("\n");
-  g_print (" timers:\n");
-  g_assert (context->resolved);
-  root_timers = uprof_context_get_root_timer_results (context);
-  for (l = context->root_timers; l != NULL; l = l->next)
-    uprof_timer_result_print_and_children ((UProfTimerResult *)l->data,
-                                           NULL, NULL);
-}
-
 static void
 resolve_timer_heirachy_cb (UProfTimerResult *timer, void *data)
 {
@@ -1035,7 +955,7 @@ resolve_timer_heirachy_cb (UProfTimerResult *timer, void *data)
 
 #ifdef DEBUG_TIMER_HEIRARACHY
 static void
-print_timer_recursive (UProfTimerResult *timer, int indent)
+debug_print_timer_recursive (UProfTimerResult *timer, int indent)
 {
   UProfContext *context = uprof_timer_result_get_context (timer);
   GList *l;
@@ -1057,14 +977,14 @@ print_timer_recursive (UProfTimerResult *timer, int indent)
 
   indent++;
   for (l = timer->children; l != NULL; l = l->next)
-    print_timer_recursive (l->data, indent);
+    debug_print_timer_recursive (l->data, indent);
 }
 
 static void
-print_timer_heirachy_cb (UProfTimerResult *timer, void *data)
+debug_print_timer_heirachy_cb (UProfTimerResult *timer, void *data)
 {
   if (timer->parent == NULL)
-    print_timer_recursive (timer, 0);
+    debug_print_timer_recursive (timer, 0);
 }
 #endif
 
@@ -1094,7 +1014,7 @@ uprof_context_resolve_timer_heirachy (UProfContext *context)
 
   uprof_context_foreach_timer (context,
                                NULL, /* no need to sort */
-                               print_timer_heirachy_cb,
+                               debug_print_timer_heirachy_cb,
                                context);
 #endif
 
@@ -1105,26 +1025,6 @@ GList *
 uprof_context_get_root_timer_results (UProfContext *context)
 {
   return g_list_copy (context->root_timers);
-}
-
-void
-uprof_context_output_report (UProfContext *context)
-{
-  GList *l;
-
-  uprof_context_resolve_timer_heirachy (context);
-
-  if (!context->report_callbacks)
-    {
-      default_report_context (context);
-      return;
-    }
-
-  for (l = context->report_callbacks; l != NULL; l = l->next)
-    {
-      UProfReportCallback callback = l->data;
-      callback (context);
-    }
 }
 
 static void
@@ -1216,6 +1116,154 @@ uprof_context_get_messages (UProfContext *context)
   for (; l != NULL; l = l->next)
     l->data = g_strdup (l->data);
   return l;
+}
+
+UProfReport *
+uprof_report_new (const char *name)
+{
+  UProfReport *report = g_slice_new0 (UProfReport);
+  report->ref = 1;
+  return report;
+}
+
+UProfReport *
+uprof_report_ref (UProfReport *report)
+{
+  report->ref++;
+  return report;
+}
+
+void
+uprof_report_unref (UProfReport *report)
+{
+  report->ref--;
+  if (!report->ref)
+    {
+      g_slice_free (UProfReport, report);
+    }
+}
+
+void
+uprof_report_add_context (UProfReport *report,
+                          UProfContext *context)
+{
+  report->contexts = g_list_prepend (report->contexts, context);
+}
+
+void
+uprof_report_add_context_callback (UProfReport *report,
+                                   UProfReportContextCallback callback)
+{
+  report->context_callbacks =
+    g_list_prepend (report->context_callbacks, callback);
+}
+
+void
+uprof_report_remove_context_callback (UProfReport *report,
+                                      UProfReportContextCallback callback)
+{
+  report->context_callbacks =
+    g_list_remove (report->context_callbacks, callback);
+}
+
+void
+uprof_report_add_timers_attribute (UProfReport *report,
+                                   const char *attribute_name,
+                                   UProfReportTimersAttributeCallback callback,
+                                   void *user_data)
+{
+  UProfTimerAttribute *attribute = g_slice_new (UProfTimerAttribute);
+  attribute->name = g_strdup (attribute_name);
+  attribute->callback = callback;
+  attribute->user_data = user_data;
+  report->timer_attributes =
+    g_list_prepend (report->timer_attributes, attribute);
+}
+
+void
+uprof_report_remove_timers_attribute (UProfReport *report,
+                                      const char *attribute_name)
+{
+  GList *l;
+
+  for (l = report->timer_attributes; l; l = l->next)
+    {
+      UProfTimerAttribute *attribute = l->data;
+      if (strcmp (attribute->name, attribute_name) == 0)
+        {
+          g_free (attribute->name);
+          g_slice_free (UProfTimerAttribute, attribute);
+          report->timer_attributes =
+            g_list_delete_link (report->timer_attributes, l);
+          return;
+        }
+    }
+}
+
+static void
+default_print_counter (UProfCounterResult *counter,
+                       gpointer            data)
+{
+  gulong count = uprof_counter_result_get_count (counter);
+  if (count == 0)
+    return;
+
+  g_print ("   %-*s%-5ld\n", REPORT_COLUMN0_WIDTH - 2,
+           uprof_counter_result_get_name (counter),
+           uprof_counter_result_get_count (counter));
+}
+
+static void
+default_report_context (UProfContext *context)
+{
+  GList *root_timers;
+  GList *l;
+
+  g_print (" context: %s\n", context->name);
+  g_print ("\n");
+  g_print (" counters:\n");
+
+  uprof_context_foreach_counter (context,
+                                 UPROF_COUNTER_SORT_COUNT_INC,
+                                 default_print_counter,
+                                 NULL);
+
+  g_print ("\n");
+  g_print (" timers:\n");
+  g_assert (context->resolved);
+  root_timers = uprof_context_get_root_timer_results (context);
+  for (l = context->root_timers; l != NULL; l = l->next)
+    uprof_timer_result_print_and_children ((UProfTimerResult *)l->data,
+                                           NULL, NULL);
+}
+
+static void
+report_context (UProfReport *report, UProfContext *context)
+{
+  GList *l;
+
+  uprof_context_resolve_timer_heirachy (context);
+
+  if (!report->context_callbacks)
+    {
+      default_report_context (context);
+      return;
+    }
+
+  for (l = report->context_callbacks; l != NULL; l = l->next)
+    {
+      UProfReportContextCallback callback = l->data;
+      callback (report, context);
+    }
+}
+
+void
+uprof_report_print (UProfReport *report)
+{
+  GList *l;
+
+  for (l = report->contexts; l; l = l->next)
+    report_context (report, l->data);
 }
 
 /* Should be easy to add new probes to code, and ideally not need to

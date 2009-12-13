@@ -16,6 +16,7 @@ UPROF_STATIC_TIMER (full_timer,
 int
 main (int argc, char **argv)
 {
+  UProfReport *report;
   UProfContext *context;
   uint64_t prev_counter;
   uint64_t counter;
@@ -44,7 +45,11 @@ main (int argc, char **argv)
   g_print ("<stop Full timer>\n");
 
   g_print ("Full timer should have a total duration of 1 second:\n");
-  uprof_context_output_report (context);
+  report = uprof_report_new ("Sanity Check report");
+  uprof_report_add_context (report, context);
+  uprof_report_print (report);
+  uprof_report_unref (report);
+
 
   uprof_context_unref (context);
 

@@ -68,6 +68,7 @@ int
 main (int argc, char **argv)
 {
   UProfContext *context;
+  UProfReport *report;
   int i;
 
   uprof_init (&argc, &argv);
@@ -130,7 +131,10 @@ main (int argc, char **argv)
   DBG_PRINTF ("stop full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
   UPROF_TIMER_STOP (context, full_timer);
 
-  uprof_context_output_report (context);
+  report = uprof_report_new ("Simple report");
+  uprof_report_add_context (report, context);
+  uprof_report_print (report);
+  uprof_report_unref (report);
 
   uprof_context_unref (context);
 

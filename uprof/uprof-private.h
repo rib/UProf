@@ -26,6 +26,7 @@
 G_BEGIN_DECLS
 
 typedef struct _UProfContext UProfContext;
+typedef struct _UProfReport UProfReport;
 
 typedef struct _UProfObjectState
 {
