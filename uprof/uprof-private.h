@@ -51,24 +51,24 @@ typedef struct _UProfCounterState
 typedef struct _UProfTimerState UProfTimerState;
 struct _UProfTimerState
 {
-  UProfObjectState    object;
+  UProfObjectState  object;
 
-  gboolean            disabled;
-  int                 recursion;
+  gboolean          disabled;
+  int               recursion;
 
-  char               *parent_name;
+  char             *parent_name;
 
-  unsigned long       count;
-  unsigned long long  start;
-  unsigned long long  total;
-  unsigned long long  partial_duration;
+  unsigned long     count;
+  guint64           start;
+  guint64           total;
+  guint64           partial_duration;
 
-  unsigned long long  fastest;
-  unsigned long long  slowest;
+  guint64           fastest;
+  guint64           slowest;
 
   /* note: not resolved until sorting @ report time */
-  UProfTimerState    *parent;
-  GList              *children;
+  UProfTimerState  *parent;
+  GList            *children;
 
 };
 

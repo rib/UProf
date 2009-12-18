@@ -60,7 +60,7 @@ main (int argc, char **argv)
       nanosleep (&delay, NULL);
 
       UPROF_TIMER_STOP (context, loop_timer);
-      DBG_PRINTF ("stop simple timer (rdtsc = %llu)\n",
+      DBG_PRINTF ("stop simple timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
                   uprof_get_system_counter ());
 
       if (i == 2)

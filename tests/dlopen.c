@@ -42,13 +42,15 @@ main (int argc, char **argv)
 
   shared_context = uprof_context_new ("Simple context");
 
-  printf ("start full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+  printf ("start full timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
+          uprof_get_system_counter ());
   UPROF_TIMER_START (shared_context, full_timer);
 
   load_and_run_module ();
   load_and_run_module ();
 
-  printf ("stop full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+  printf ("stop full timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
+          uprof_get_system_counter ());
   UPROF_TIMER_STOP (shared_context, full_timer);
 
   report = uprof_report_new ("dlopen report");

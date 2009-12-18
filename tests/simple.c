@@ -76,14 +76,15 @@ main (int argc, char **argv)
   context = uprof_context_new ("Simple context");
 
 
-  DBG_PRINTF ("start full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+  DBG_PRINTF ("start full timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
+              uprof_get_system_counter ());
   UPROF_TIMER_START (context, full_timer);
   for (i = 0; i < 2; i ++)
     {
       struct timespec delay;
       UPROF_COUNTER_INC (context, loop0_counter);
 
-      DBG_PRINTF ("start simple timer (rdtsc = %llu)\n",
+      DBG_PRINTF ("start simple timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
                   uprof_get_system_counter ());
       UPROF_TIMER_START (context, loop0_timer);
       DBG_PRINTF ("  <delay: 1/2 sec>\n");
@@ -99,7 +100,7 @@ main (int argc, char **argv)
       UPROF_TIMER_STOP (context, loop0_sub_timer);
 
       UPROF_TIMER_STOP (context, loop0_timer);
-      DBG_PRINTF ("stop simple timer (rdtsc = %llu)\n",
+      DBG_PRINTF ("stop simple timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
                   uprof_get_system_counter ());
     }
 
@@ -108,7 +109,7 @@ main (int argc, char **argv)
       struct timespec delay;
       UPROF_COUNTER_INC (context, loop1_counter);
 
-      DBG_PRINTF ("start simple timer (rdtsc = %llu)\n",
+      DBG_PRINTF ("start simple timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
                   uprof_get_system_counter ());
       UPROF_TIMER_START (context, loop1_timer);
       DBG_PRINTF ("  <delay: 1/4 sec>\n");
@@ -124,11 +125,12 @@ main (int argc, char **argv)
       UPROF_TIMER_STOP (context, loop1_sub_timer);
 
       UPROF_TIMER_STOP (context, loop1_timer);
-      DBG_PRINTF ("stop simple timer (rdtsc = %llu)\n",
+      DBG_PRINTF ("stop simple timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
                   uprof_get_system_counter ());
     }
 
-  DBG_PRINTF ("stop full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+  DBG_PRINTF ("stop full timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
+              uprof_get_system_counter ());
   UPROF_TIMER_STOP (context, full_timer);
 
   report = uprof_report_new ("Simple report");

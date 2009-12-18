@@ -114,11 +114,11 @@ typedef struct _RDTSCVal
           uint32_t low;
           uint32_t hi;
       } split;
-      uint64_t full_value;
+      guint64 full_value;
   } u;
 } RDTSCVal;
 
-static uint64_t system_counter_hz;
+static guint64 system_counter_hz;
 static GList *_uprof_all_contexts;
 #ifndef USE_RDTSC
 static clockid_t clockid;
@@ -154,8 +154,8 @@ uprof_init (int *argc, char ***argv)
 static void
 uprof_calibrate_system_counter (void)
 {
-  uint64_t time0, time1 = 0;
-  uint64_t diff;
+  guint64 time0, time1 = 0;
+  guint64 diff;
 
   if (system_counter_hz)
     return;
@@ -191,14 +191,14 @@ uprof_calibrate_system_counter (void)
   diff = time1 - time0;
   system_counter_hz = diff * 4;
 
-  DBG_PRINTF ("time0: %llu\n", time0);
+  DBG_PRINTF ("time0: %" G_GUINT64_FORMAT "\n", time0);
   DBG_PRINTF (" <sleep for 1/4 second>\n");
-  DBG_PRINTF ("time1: %llu\n", time1);
-  DBG_PRINTF ("Diff over 1/4 second: %llu\n", diff);
-  DBG_PRINTF ("System Counter HZ: %llu\n", system_counter_hz);
+  DBG_PRINTF ("time1: %" G_GUINT64_FORMAT "\n", time1);
+  DBG_PRINTF ("Diff over 1/4 second: %" G_GUINT64_FORMAT "\n", diff);
+  DBG_PRINTF ("System Counter HZ: %" G_GUINT64_FORMAT "\n", system_counter_hz);
 }
 
-uint64_t
+guint64
 uprof_get_system_counter (void)
 {
 #ifdef USE_RDTSC
@@ -221,11 +221,12 @@ uprof_get_system_counter (void)
        : /* input */
        : "%edx", "%eax");
 
-  /* g_print ("counter = %llu\n", (uint64_t)rdtsc.u.full_value); */
+  /* g_print ("counter = %" G_GUINT64_FORMAT "\n",
+              (guint64)rdtsc.u.full_value); */
   return rdtsc.u.full_value;
 #else
   struct timespec ts;
-  uint64_t ret;
+  guint64 ret;
 
 #if 0
   /* XXX: Seems very unreliable compared to simply using rdtsc asm () as above
@@ -239,13 +240,13 @@ uprof_get_system_counter (void)
   ret *= 1000000000;
   ret += ts.tv_nsec;
 
-  /* g_print ("counter = %llu\n", (uint64_t)ret); */
+  /* g_print ("counter = %" G_GUINT64_FORMAT "\n", (guint64)ret); */
 
   return ret;
 #endif
 }
 
-uint64_t
+guint64
 uprof_get_system_counter_hz (void)
 {
   uprof_calibrate_system_counter ();

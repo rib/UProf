@@ -18,8 +18,8 @@ main (int argc, char **argv)
 {
   UProfReport *report;
   UProfContext *context;
-  uint64_t prev_counter;
-  uint64_t counter;
+  guint64 prev_counter;
+  guint64 counter;
   int i;
 
   uprof_init (&argc, &argv);
@@ -29,11 +29,11 @@ main (int argc, char **argv)
   prev_counter = uprof_get_system_counter ();
   for (i = 0; i < 1000; i++)
     {
-      uint64_t diff;
+      guint64 diff;
       counter = uprof_get_system_counter ();
       diff = counter - prev_counter;
       prev_counter = counter;
-      g_print ("diff = %llu\n", (unsigned long long)diff);
+      g_print ("diff = %" G_GUINT64_FORMAT "\n", diff);
     }
 
   g_print ("<start Full timer>\n");

@@ -24,6 +24,7 @@
 #include <uprof-private.h>
 
 #include <glib.h>
+#include <stdint.h>
 
 G_BEGIN_DECLS
 
@@ -97,7 +98,7 @@ uprof_init (int *argc, char ***argv);
  *
  * Returns: a 64bit system counter
  */
-unsigned long long
+guint64
 uprof_get_system_counter (void);
 
 /**
@@ -112,7 +113,7 @@ uprof_get_system_counter (void);
  *
  * Returns: A factor that can be used to convert elapsed counts into seconds.
  */
-unsigned long long
+guint64
 uprof_get_system_counter_hz (void);
 
 /**
@@ -509,14 +510,14 @@ uprof_context_output_report (UProfContext *context);
     DEBUG_CHECK_TIMER_WAS_STARTED (CONTEXT, TIMER_SYMBOL); \
     if (G_LIKELY (!(TIMER_SYMBOL).state->disabled)) \
       { \
-        unsigned long long duration = uprof_get_system_counter() - \
-                                      (TIMER_SYMBOL).state->start + \
-                                      (TIMER_SYMBOL).state->partial_duration; \
+        guint64 duration = uprof_get_system_counter() - \
+                           (TIMER_SYMBOL).state->start + \
+                           (TIMER_SYMBOL).state->partial_duration; \
         COMPARE_AND_ADD_DURATION_TO_TOTAL (TIMER_SYMBOL); \
       } \
     else if (G_UNLIKELY ((TIMER_SYMBOL).state->partial_duration)) \
       { \
-        unsigned long long duration = (TIMER_SYMBOL).state->partial_duration; \
+        guint64 duration = (TIMER_SYMBOL).state->partial_duration; \
         COMPARE_AND_ADD_DURATION_TO_TOTAL (TIMER_SYMBOL); \
       } \
     (TIMER_SYMBOL).state->count++; \

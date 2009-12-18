@@ -77,14 +77,15 @@ main (int argc, char **argv)
   context0 = uprof_context_new ("context0");
   context1 = uprof_context_new ("context1");
 
-  DBG_PRINTF ("start full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+  DBG_PRINTF ("start full timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
+              uprof_get_system_counter ());
   UPROF_TIMER_START (context0, full_timer);
   for (i = 0; i < 2; i ++)
     {
       struct timespec delay;
       UPROF_COUNTER_INC (context0, loop0_counter);
 
-      DBG_PRINTF ("start simple timer (rdtsc = %llu)\n",
+      DBG_PRINTF ("start simple timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
                   uprof_get_system_counter ());
       UPROF_TIMER_START (context0, loop0_timer);
       DBG_PRINTF ("  <delay: 1/2 sec>\n");
@@ -100,7 +101,7 @@ main (int argc, char **argv)
       UPROF_TIMER_STOP (context0, loop0_sub_timer);
 
       UPROF_TIMER_STOP (context0, loop0_timer);
-      DBG_PRINTF ("stop simple timer (rdtsc = %llu)\n",
+      DBG_PRINTF ("stop simple timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
                   uprof_get_system_counter ());
     }
 
@@ -109,7 +110,7 @@ main (int argc, char **argv)
       struct timespec delay;
       UPROF_COUNTER_INC (context1, loop1_counter);
 
-      DBG_PRINTF ("start simple timer (rdtsc = %llu)\n",
+      DBG_PRINTF ("start simple timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
                   uprof_get_system_counter ());
       UPROF_TIMER_START (context1, loop1_timer);
       DBG_PRINTF ("  <delay: 1/4 sec>\n");
@@ -125,11 +126,12 @@ main (int argc, char **argv)
       UPROF_TIMER_STOP (context1, loop1_sub_timer);
 
       UPROF_TIMER_STOP (context1, loop1_timer);
-      DBG_PRINTF ("stop simple timer (rdtsc = %llu)\n",
+      DBG_PRINTF ("stop simple timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
                   uprof_get_system_counter ());
     }
 
-  DBG_PRINTF ("stop full timer (rdtsc = %llu)\n", uprof_get_system_counter ());
+  DBG_PRINTF ("stop full timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
+              uprof_get_system_counter ());
   UPROF_TIMER_STOP (context0, full_timer);
 
   uprof_context_link (context0, context1);
