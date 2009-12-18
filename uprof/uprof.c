@@ -167,7 +167,7 @@ uprof_calibrate_system_counter (void)
     {
       struct timespec delay;
       time0 = uprof_get_system_counter ();
-      delay.tv_nsec = 0;
+      delay.tv_sec = 0;
       delay.tv_nsec = 1000000000/4;
       if (nanosleep (&delay, NULL) == -1)
         {
