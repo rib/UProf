@@ -20,7 +20,7 @@
 
 #define USE_RDTSC
 
-#ifndef __i386__
+#if !defined(__i386__) && !defined(__x86_64__)
 #undef USE_RDTSC
 #endif
 //#undef USE_RDTSC
