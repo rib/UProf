@@ -1,6 +1,6 @@
 /* This file is part of UProf.
  *
- * Copyright © 2008, 2009 Robert Bragg
+ * Copyright © 2008, 2009, 2010 Robert Bragg
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
