@@ -448,11 +448,8 @@ uprof_context_output_report (UProfContext *context);
   do { \
     if (!(TIMER_SYMBOL).state) \
       _UPROF_INIT_UNSEEN_TIMER (CONTEXT, TIMER_SYMBOL); \
-    if (!(TIMER_SYMBOL).state->disabled) \
-      { \
-        DEBUG_CHECK_FOR_RECURSION (CONTEXT, TIMER_SYMBOL); \
-        (TIMER_SYMBOL).state->start = uprof_get_system_counter (); \
-      } \
+    DEBUG_CHECK_FOR_RECURSION (CONTEXT, TIMER_SYMBOL); \
+    (TIMER_SYMBOL).state->start = uprof_get_system_counter (); \
   } while (0)
 
 /**
@@ -469,12 +466,9 @@ uprof_context_output_report (UProfContext *context);
   do { \
     if (!(TIMER_SYMBOL).state) \
       _UPROF_INIT_UNSEEN_TIMER (CONTEXT, TIMER_SYMBOL); \
-    if (!(TIMER_SYMBOL).state->disabled) \
+    if ((TIMER_SYMBOL).state->recursion++ == 0) \
       { \
-        if ((TIMER_SYMBOL).state->recursion++ == 0) \
-          { \
-            (TIMER_SYMBOL).state->start = uprof_get_system_counter (); \
-          } \
+        (TIMER_SYMBOL).state->start = uprof_get_system_counter (); \
       } \
   } while (0)
 
@@ -487,14 +481,18 @@ uprof_context_output_report (UProfContext *context);
                    (TIMER_SYMBOL).name); \
       } \
   } while (0)
-#define DEBUG_ZERO_TIMER_START(CONTEXT, TIMER_SYMBOL) \
-  do { \
-    (TIMER_SYMBOL).state->start = 0; \
-  } while (0)
 #else
 #define DEBUG_CHECK_TIMER_WAS_STARTED(CONTEXT, TIMER_SYMBOL)
-#define DEBUG_ZERO_TIMER_START(CONTEXT, TIMER_SYMBOL)
 #endif
+
+#define COMPARE_AND_ADD_DURATION_TO_TOTAL(TIMER_SYMBOL) \
+  do { \
+    if (G_UNLIKELY (duration < (TIMER_SYMBOL).state->fastest)) \
+      (TIMER_SYMBOL).state->fastest = duration; \
+    else if (G_UNLIKELY (duration > (TIMER_SYMBOL).state->slowest)) \
+      (TIMER_SYMBOL).state->slowest = duration; \
+    (TIMER_SYMBOL).state->total += duration; \
+  } while (0)
 
 /**
  * UPROF_TIMER_STOP:
@@ -508,19 +506,21 @@ uprof_context_output_report (UProfContext *context);
  */
 #define UPROF_TIMER_STOP(CONTEXT, TIMER_SYMBOL) \
   do { \
-    if (!(TIMER_SYMBOL).state->disabled) \
+    DEBUG_CHECK_TIMER_WAS_STARTED (CONTEXT, TIMER_SYMBOL); \
+    if (G_LIKELY (!(TIMER_SYMBOL).state->disabled)) \
       { \
-        unsigned long long duration; \
-        (TIMER_SYMBOL).state->count++; \
-        DEBUG_CHECK_TIMER_WAS_STARTED (CONTEXT, TIMER_SYMBOL); \
-        duration = uprof_get_system_counter() - (TIMER_SYMBOL).state->start; \
-        if ((duration < (TIMER_SYMBOL).state->fastest)) \
-          (TIMER_SYMBOL).state->fastest = duration; \
-        else if ((duration > (TIMER_SYMBOL).state->slowest)) \
-          (TIMER_SYMBOL).state->slowest = duration; \
-        (TIMER_SYMBOL).state->total += duration; \
-        DEBUG_ZERO_TIMER_START (CONTEXT, TIMER_SYMBOL); \
+        unsigned long long duration = uprof_get_system_counter() - \
+                                      (TIMER_SYMBOL).state->start + \
+                                      (TIMER_SYMBOL).state->partial_duration; \
+        COMPARE_AND_ADD_DURATION_TO_TOTAL (TIMER_SYMBOL); \
       } \
+    else if (G_UNLIKELY ((TIMER_SYMBOL).state->partial_duration)) \
+      { \
+        unsigned long long duration = (TIMER_SYMBOL).state->partial_duration; \
+        COMPARE_AND_ADD_DURATION_TO_TOTAL (TIMER_SYMBOL); \
+      } \
+    (TIMER_SYMBOL).state->count++; \
+    (TIMER_SYMBOL).state->start = 0; \
   } while (0)
 
 /**
@@ -536,19 +536,9 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_RECURSIVE_TIMER_STOP(CONTEXT, TIMER_SYMBOL) \
   do { \
     g_assert ((TIMER_SYMBOL).state->recursion > 0); \
-    if (!(TIMER_SYMBOL).state->disabled && \
-        (TIMER_SYMBOL).state->recursion-- == 1) \
+    if ((TIMER_SYMBOL).state->recursion-- == 1) \
       { \
-        unsigned long long duration; \
-        (TIMER_SYMBOL).state->count++; \
-        DEBUG_CHECK_TIMER_WAS_STARTED (CONTEXT, TIMER_SYMBOL); \
-        duration = uprof_get_system_counter() - (TIMER_SYMBOL).state->start; \
-        if ((duration < (TIMER_SYMBOL).state->fastest)) \
-          (TIMER_SYMBOL).state->fastest = duration; \
-        else if ((duration > (TIMER_SYMBOL).state->slowest)) \
-          (TIMER_SYMBOL).state->slowest = duration; \
-        (TIMER_SYMBOL).state->total += duration; \
-        DEBUG_ZERO_TIMER_START (CONTEXT, TIMER_SYMBOL); \
+        UPROF_TIMER_STOP (CONTEXT, TIMER_SYMBOL); \
       } \
   } while (0)
 

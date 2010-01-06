@@ -80,7 +80,7 @@ struct _UProfContext
   GList	*counters;
   GList	*timers;
 
-  gboolean suspended;
+  int disabled;
 
   gboolean resolved;
   GList *root_timers;
@@ -409,8 +409,7 @@ uprof_context_add_counter (UProfContext *context, UProfCounter *counter)
     {
       UProfObjectState *object;
       state = g_slice_alloc0 (sizeof (UProfCounterState));
-      if (context->suspended)
-        state->disabled = 1;
+      state->disabled = context->disabled;
       object = (UProfObjectState *)state;
       object->context = context;
       object->name = g_strdup (counter->name);
@@ -436,8 +435,7 @@ uprof_context_add_timer (UProfContext *context, UProfTimer *timer)
     {
       UProfObjectState *object;
       state = g_slice_alloc0 (sizeof (UProfTimerState));
-      if (context->suspended)
-        state->disabled = 1;
+      state->disabled = context->disabled;
       object = (UProfObjectState *)state;
       object->context = context;
       object->name = g_strdup (timer->name);
@@ -1032,23 +1030,22 @@ _uprof_suspend_single_context (UProfContext *context)
 {
   GList *l;
 
-  if (context->suspended)
-    {
-      g_warning ("uprof_suspend_context calls can't be nested!\n");
-      return;
-    }
-
-  /* FIXME - how can we verify that the timer hasn't already
-   * been started? Currently we only expose debugging via a
-   * build time macro that can only affect uprof.h */
+  context->disabled++;
 
   for (l = context->timers; l != NULL; l = l->next)
-    ((UProfTimerState *)l->data)->disabled++;
+    {
+      UProfTimerState *timer = l->data;
+
+      timer->disabled++;
+      if (timer->start && timer->disabled == 1)
+        {
+          timer->partial_duration +=
+            uprof_get_system_counter () - timer->start;
+        }
+    }
 
   for (l = context->counters; l != NULL; l = l->next)
     ((UProfCounterState *)l->data)->disabled++;
-
-  context->suspended = TRUE;
 }
 
 void
@@ -1067,20 +1064,21 @@ _uprof_resume_single_context (UProfContext *context)
 {
   GList *l;
 
-  if (!context->suspended)
-    {
-      g_warning ("can't use uprof_resume_context with an un-suspended"
-                 "context");
-      return;
-    }
+  context->disabled--;
 
   for (l = context->timers; l != NULL; l = l->next)
-    ((UProfTimerState *)l->data)->disabled--;
+    {
+      UProfTimerState *timer = l->data;
+      timer->disabled--;
+      /* Handle resuming of timers... */
+      /* NB: any accumulated ->partial_duration will be added to the total
+       * when the timer is stopped. */
+      if (timer->start && timer->disabled == 0)
+        timer->start = uprof_get_system_counter (); \
+    }
 
   for (l = context->counters; l != NULL; l = l->next)
     ((UProfCounterState *)l->data)->disabled--;
-
-  context->suspended = FALSE;
 }
 
 void

@@ -61,6 +61,7 @@ struct _UProfTimerState
   unsigned long       count;
   unsigned long long  start;
   unsigned long long  total;
+  unsigned long long  partial_duration;
 
   unsigned long long  fastest;
   unsigned long long  slowest;
