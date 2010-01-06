@@ -1052,7 +1052,7 @@ _uprof_suspend_single_context (UProfContext *context)
 }
 
 void
-uprof_suspend_context (UProfContext *context)
+uprof_context_suspend (UProfContext *context)
 {
   GList *l;
 
@@ -1084,7 +1084,7 @@ _uprof_resume_single_context (UProfContext *context)
 }
 
 void
-uprof_resume_context (UProfContext *context)
+uprof_context_resume (UProfContext *context)
 {
   GList *l;
 

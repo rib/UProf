@@ -48,7 +48,7 @@ main (int argc, char **argv)
       if (i == 1)
         {
           DBG_PRINTF ("suspending context\n");
-          uprof_suspend_context (context);
+          uprof_context_suspend (context);
         }
 
       UPROF_COUNTER_INC (context, loop_counter);
@@ -66,7 +66,7 @@ main (int argc, char **argv)
       if (i == 2)
         {
           DBG_PRINTF ("resuming context\n");
-          uprof_resume_context (context);
+          uprof_context_resume (context);
         }
     }
 

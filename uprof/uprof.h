@@ -579,7 +579,7 @@ uprof_context_add_report_message (UProfContext *context,
  * equal number of calls to uprof_context_resume()
  */
 void
-uprof_suspend_context (UProfContext *context);
+uprof_context_suspend (UProfContext *context);
 
 /**
  * uprof_context_resume:
@@ -592,7 +592,7 @@ uprof_suspend_context (UProfContext *context);
  * equal number of calls to uprof_context_resume()
  */
 void
-uprof_resume_context (UProfContext *context);
+uprof_context_resume (UProfContext *context);
 
 /*
  * Support for reporting results:
