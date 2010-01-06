@@ -48,12 +48,14 @@
       <title>About UProf</title>
 
       <para>UProf is a toolkit for profiling applications and libraries with an
-      emphasis on domain specific instrumentation. Unlike tools like oprofile
-      which don't require modification of code but can't customize reports to
-      the applications being examined; uprof supports you, the developer, in
-      adding timer and counter probes at the points you know are critical to
-      your project so that you always have easy access to those numbers that
-      really matter to you.</para>
+      emphasis on domain specific instrumentation. Unlike tools such as
+      OProfile or Sysprof UProf can be used to provide application specific
+      reports making statistics more accesible, and encouraging ongoing
+      tracking of key statistics. Also unlike sysprof the current timing
+      features are non-stochastic and measure real world elapsed time (via the
+      rdtsc instruction for x86 CPUs) This gives us a very high precision
+      counter and measuring real world time has proven to be good way of
+      highlighiting non-CPU bound bottlenecks.</para>
 
     </section>
 

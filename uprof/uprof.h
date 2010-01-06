@@ -75,21 +75,42 @@ typedef struct _UProfTimerState   UProfTimerResult;
 
 /**
  * uprof_init:
- * FIXME
+ * @argc: (inout): The number of arguments in @argv
+ * @argv: (array length=argc) (inout) (allow-none): A pointer to an array
+ *   of arguments.
+ *
+ * It will initialise everything needed to operate with UProf and
+ * parses any standard command line options. @argc and @argv are
+ * adjusted accordingly so your own code will never see those standard
+ * arguments.
  */
 void
 uprof_init (int *argc, char ***argv);
 
 /**
  * uprof_get_system_counter:
- * FIXME
+ *
+ * Gives direct access to the counter that uprof is using for timing.  On x86
+ * platforms this executes the rdtsc instruction to return a 64bit integer that
+ * increases at the CPU or system bus frequency. Other platforms fall back to
+ * clock_gettime (CLOCK_MONOTONIC, &ts)
+ *
+ * Returns: a 64bit system counter
  */
 unsigned long long
 uprof_get_system_counter (void);
 
 /**
  * uprof_get_system_counter_hz:
- * FIXME
+ *
+ * Allows you to convert elapsed counts into seconds. Be aware that the
+ * calculation of the conversion factor is done in a fairly crude way so it may
+ * not be very accurate. This usually isn't a big problem though as any
+ * inaccuracy will apply consistently to everything in a uprof report so the
+ * numbers still tend to end up relatively useful. It may be worth bearing in
+ * mind though if comparing different reports.
+ *
+ * Returns: A factor that can be used to convert elapsed counts into seconds.
  */
 unsigned long long
 uprof_get_system_counter_hz (void);
@@ -100,15 +121,49 @@ uprof_get_system_counter_hz (void);
  *
  * This creates a new profiling context with a given name. After creating
  * a context you should declare your timers and counters, and once
- * you have accumulated data you can print the results using
- * uprof_get_report()
+ * you have accumulated data you can print the results by creating a report
+ * via uprof_report_new(), uprof_report_add_context() and uprof_report_print()
+ *
+ * For example:
+ * |[
+ *    UProfContext *context;
+ *    UProfReport *report;
+ *    UPROF_STATIC_TIMER (parent_timer,
+ *                        NULL, // no parent
+ *                        "Parent timer",
+ *                        "An example parent timer",
+ *                        0 // no application private data);
+ *    UPROF_STATIC_TIMER (timer,
+ *                        "Parent timer",
+ *                        "Simple timer",
+ *                        "An example timer",
+ *                        0 // no application private data);
+ *
+ *    uprof_context_init (argc, argv);
+ *
+ *    context = uprof_context_new ("Test Context");
+ *
+ *    UPROF_TIMER_START (context, parent_timer);
+ *    sleep (1);
+ *    UPROF_TIMER_START (context, timer);
+ *    sleep (1);
+ *    UPROF_TIMER_STOP (context, timer);
+ *    UPROF_TIMER_STOP (context, parent_timer);
+ *
+ *    report = uprof_report_new ("Test Report");
+ *    uprof_report_add_context (context);
+ *    uprof_report_print ();
+ *    uprof_report_unref ();
+ *
+ *    uprof_context_unref ();
+ * ]|
  */
 UProfContext *
 uprof_context_new (const char *name);
 
 /**
  * uprof_context_ref:
- * @context: A UProf context
+ * @context: A UProfContext
  *
  * Take a reference on a uprof context.
  */
@@ -117,7 +172,7 @@ uprof_context_ref (UProfContext *context);
 
 /**
  * uprof_context_imref:
- * @context: A UProf context
+ * @context: A UProfContext
  *
  * Release a reference on a uprof context. When the reference count reaches
  * zero the context is freed.
@@ -137,36 +192,44 @@ uprof_find_context (const char *name);
 
 /**
  * uprof_context_add_counter:
- * @context: A UProf context
- * FIXME
+ * @context: A UProfContext
+ *
+ * Declares a new uprof counter and associates it with a context. Normally this
+ * API isn't used directly because the UPROF_COUNTER_INC(), UPROF_COUNTER_DEC()
+ * and UPROF_COUNTER_ZERO() macros will ensure a counter is added the first
+ * time it used.
  */
 void
 uprof_context_add_counter (UProfContext *context, UProfCounter *counter);
 
 /**
  * uprof_context_add_timer:
- * @context: A UProf context
- * FIXME
+ * @context: A UProfContext
+ *
+ * Declares a new uprof timer and associates it with a context. Normally this
+ * API isn't used directly because the UPROF_TIMER_START() and
+ * UPROF_RECURSIVE_TIMER_START() macros will ensure a timer is added the first
+ * time it used.
  */
 void
 uprof_context_add_timer (UProfContext *context, UProfTimer *timer);
 
 /**
  * uprof_context_link:
- * @context: A UProf context
+ * @context: A UProfContext
  * @other: A UProf context whos timers and counters you want to be made
  *         available to @context.
  *
- * By linking your context with another, then the timers and counters of
- * the @other context will become in a way part of the first @context - at
- * least as far as reporting is concerned. For example calling
- * uprof_context_foreach_counter() would iterate all the counters
- * of other contexts linked to the given context.
+ * Links two contexts together so the timers and counters of the @other context
+ * will become in a way part of the first @context - at least as far as
+ * reporting is concerned. For example calling uprof_context_foreach_counter()
+ * would iterate all the counters of other contexts linked to the given
+ * context.
  *
- * This can be usefull if you are profiling a library that itself loads a
- * DSO, but you can't export a context symbol from the library to the DSO
- * because it happens that this DSO is also used by other libraries or
- * applications which can't provide that symbol.
+ * This can be useful if you are profiling a library that itself dynamically
+ * loads a shared object (DSO), but you can't export a context symbol from the
+ * library to the DSO because it happens that this DSO is also used by other
+ * libraries or applications which can't provide that symbol.
  *
  * The intention is to create a context that is owned by the DSO, and when we
  * end up loading the DSO in the library we are profiling we can link that
@@ -182,16 +245,20 @@ void
 uprof_context_link (UProfContext *context, UProfContext *other);
 
 /**
- * @context: A UProf context
+ * uprof_context_unlink:
+ * @context: A UProfContext
  * @other: A UProf context whos timers and counters were previously made
  *         available to @context.
+ *
+ * This removes a link between two contexts that was previously created using
+ * uprof_context_link()
  */
 void
 uprof_context_unlink (UProfContext *context, UProfContext *other);
 
 /**
  * uprof_context_output_report:
- * @context: A UProf context
+ * @context: A UProfContext
  *
  * Generates a report of the accumulated timer and counter data associated with
  * the given context.
@@ -203,6 +270,20 @@ uprof_context_output_report (UProfContext *context);
  * Counters
  ************/
 
+/**
+ * UPROF_COUNTER:
+ * @COUNTER_SYMBOL: The name of the C symbol to declare
+ * @NAME: The name of the counter used for reporting
+ * @DESCRIPTION: A string describing what the timer represents
+ * @PRIV: Optional private data (unsigned long) which you can access if you are
+ *	  generating a very customized report. For example you might put
+ *	  application specific flags here that affect reporting.
+ *
+ * Declares a new counter structure which can be used with the
+ * UPROF_COUNTER_INC(), UPROF_COUNTER_DEC() and UPROF_COUNTER_ZERO() macros.
+ * Usually you should use UPROF_STATIC_COUNTER() instead, but this may be useful
+ * for special cases where counters are accessed from multiple files.
+ */
 #define UPROF_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV) \
   UProfCounter COUNTER_SYMBOL = { \
     .name = NAME, \
@@ -214,12 +295,14 @@ uprof_context_output_report (UProfContext *context);
 /**
  * UPROF_STATIC_COUNTER:
  * @COUNTER_SYMBOL: The name of the C symbol to declare
+ * @NAME: The name of the counter used for reporting
  * @DESCRIPTION: A string describing what the timer represents
- * @PRIV: Optional private data (unsigned long) which you can get to if you are
+ * @PRIV: Optional private data (unsigned long) which you can access if you are
  *	  generating a very customized report. For example you might put
  *	  application specific flags here that affect reporting.
  *
- * This can be used to declare a new static counter structure
+ * Declares a new static counter structure which can be used with the
+ * UPROF_COUNTER_INC(), UPROF_COUNTER_DEC() and UPROF_COUNTER_ZERO() macros.
  */
 #define UPROF_STATIC_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV) \
   static UPROF_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV)
@@ -232,6 +315,13 @@ uprof_context_output_report (UProfContext *context);
     uprof_context_add_counter (CONTEXT, &(COUNTER_SYMBOL)); \
   } while (0)
 
+/**
+ * UPROF_COUNTER_INC:
+ * @CONTEXT: A UProfContext
+ * @COUNTER_SYMBOL: A counter variable
+ *
+ * Increases the count for the given @COUNTER_SYMBOL.
+ */
 #define UPROF_COUNTER_INC(CONTEXT, COUNTER_SYMBOL) \
   do { \
     if (!(COUNTER_SYMBOL).state) \
@@ -241,6 +331,13 @@ uprof_context_output_report (UProfContext *context);
     (COUNTER_SYMBOL).state->count++; \
   } while (0)
 
+/**
+ * UPROF_COUNTER_DEC:
+ * @CONTEXT: A UProfContext
+ * @COUNTER_SYMBOL: A counter variable
+ *
+ * Decreases the count for the given @COUNTER_SYMBOL.
+ */
 #define UPROF_COUNTER_DEC(CONTEXT, COUNTER_SYMBOL) \
   do { \
     if (!(COUNTER_SYMBOL).state) \
@@ -250,6 +347,13 @@ uprof_context_output_report (UProfContext *context);
     (COUNTER_SYMBOL).state->count--; \
   } while (0)
 
+/**
+ * UPROF_COUNTER_ZERO:
+ * @CONTEXT: A UProfContext
+ * @COUNTER_SYMBOL: A counter variable
+ *
+ * Resets the count for the given @COUNTER_SYMBOL.
+ */
 #define UPROF_COUNTER_ZERO(CONTEXT, COUNTER_SYMBOL) \
   do { \
     if (!(COUNTER_SYMBOL).state) \
@@ -266,6 +370,22 @@ uprof_context_output_report (UProfContext *context);
  * Timers
  ************/
 
+/**
+ * UPROF_STATIC_TIMER:
+ * @TIMER_SYMBOL: The name of the C symbol to declare
+ * @PARENT: The name of a parent timer (To clarify; this should be a string
+ *          name identifying the parent, not the C symbol name for the parent)
+ * @NAME: The timer name used for reporting
+ * @DESCRIPTION: A string describing what the timer represents
+ * @PRIV: Optional private data (unsigned long) which you can access if you are
+ *	  generating a very customized report. For example you might put
+ *	  application specific flags here that affect reporting.
+ *
+ * This can be used to declare a new timer structure which can then
+ * be used with the UPROF_TIMER_START() and UPROF_TIMER_STOP() macros.
+ * Usually you should use UPROF_STATIC_TIMER() instead but this can be useful
+ * for special cases where you need to access a timer from multiple files.
+ */
 #define UPROF_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV) \
   UProfTimer TIMER_SYMBOL = { \
     .name = NAME, \
@@ -280,13 +400,15 @@ uprof_context_output_report (UProfContext *context);
  * @TIMER_SYMBOL: The name of the C symbol to declare
  * @PARENT: The name of a parent timer (it should really be the name given to
  *	    the parent, not the C symbol name for the parent)
+ * @NAME: The timer name used for reporting
  * @DESCRIPTION: A string describing what the timer represents
- * @PRIV: Optional private data (unsigned long) which you can get to if you are
+ * @PRIV: Optional private data (unsigned long) which you can access if you are
  *	  generating a very customized report. For example you might put
  *	  application specific flags here that affect reporting.
- * This can be used to declare a new static timer structure
+ *
+ * This can be used to declare a new static timer structure which can then
+ * be used with the UPROF_TIMER_START() and UPROF_TIMER_STOP() macros.
  */
-
 #define UPROF_STATIC_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV) \
   static UPROF_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV)
 
@@ -303,7 +425,9 @@ uprof_context_output_report (UProfContext *context);
   do { \
     if ((TIMER_SYMBOL).state->start) \
       { \
-        g_warning ("Recursive starting of timer (%s) unsuported!", \
+        g_warning ("Recursive starting of timer (%s) unsupported! \n" \
+                   "You should use UPROF_RECURSIVE_TIMER_START if you " \
+                   "need recursion", \
                    (TIMER_SYMBOL).name); \
       } \
   } while (0)
@@ -311,6 +435,15 @@ uprof_context_output_report (UProfContext *context);
 #define DEBUG_CHECK_FOR_RECURSION(CONTEXT, TIMER_SYMBOL)
 #endif
 
+/**
+ * UPROF_TIMER_START:
+ * CONTEXT: A UProfContext
+ * TIMER_SYMBOL: A timer variable
+ *
+ * Starts the timer timing. It is an error to try and start a timer that
+ * is already timing; if you need to do this you should use
+ * UPROF_RECURSIVE_TIMER_START() instead.
+ */
 #define UPROF_TIMER_START(CONTEXT, TIMER_SYMBOL) \
   do { \
     if (!(TIMER_SYMBOL).state) \
@@ -322,6 +455,16 @@ uprof_context_output_report (UProfContext *context);
       } \
   } while (0)
 
+/**
+ * UPROF_RECURSIVE_TIMER_START:
+ * CONTEXT: A UProfContext
+ * TIMER_SYMBOL: A timer variable
+ *
+ * Starts the timer timing like UPROF_TIMER_START() but with additional guards
+ * to allow the timer to be started multiple times, such that
+ * UPROF_RECURSIVE_TIMER_STOP() must be called an equal number of times to
+ * actually stop it timing.
+ */
 #define UPROF_RECURSIVE_TIMER_START(CONTEXT, TIMER_SYMBOL) \
   do { \
     if (!(TIMER_SYMBOL).state) \
@@ -334,11 +477,6 @@ uprof_context_output_report (UProfContext *context);
           } \
       } \
   } while (0)
-
-/* XXX: We should add debug profiling to also verify that the timer isn't already
- * running. */
-
-/* XXX: We should consider system counter wrap around issues */
 
 #ifdef UPROF_DEBUG
 #define DEBUG_CHECK_TIMER_WAS_STARTED(CONTEXT, TIMER_SYMBOL) \
@@ -358,6 +496,16 @@ uprof_context_output_report (UProfContext *context);
 #define DEBUG_ZERO_TIMER_START(CONTEXT, TIMER_SYMBOL)
 #endif
 
+/**
+ * UPROF_TIMER_STOP:
+ * CONTEXT: A UProfContext
+ * TIMER_SYMBOL: A timer variable
+ *
+ * Stops the timer timing. It is an error to try and stop a timer that
+ * isn't actually timing. It is also an error to use this macro if the
+ * timer was started using UPROF_RECURSIVE_TIMER_START(); you should
+ * use UPROF_RECURSIVE_TIMER_STOP() instead.
+ */
 #define UPROF_TIMER_STOP(CONTEXT, TIMER_SYMBOL) \
   do { \
     if (!(TIMER_SYMBOL).state->disabled) \
@@ -375,6 +523,16 @@ uprof_context_output_report (UProfContext *context);
       } \
   } while (0)
 
+/**
+ * UPROF_RECURSIVE_TIMER_STOP:
+ * CONTEXT: A UProfContext
+ * TIMER_SYMBOL: A timer variable
+ *
+ * Stops a recursive timer timing. It is an error to try and stop a timer that
+ * isn't actually timing. It is also an error to use this macro if the timer
+ * was started using UPROF_TIMER_START(); you should use UPROF_TIMER_STOP()
+ * instead.
+ */
 #define UPROF_RECURSIVE_TIMER_STOP(CONTEXT, TIMER_SYMBOL) \
   do { \
     g_assert ((TIMER_SYMBOL).state->recursion > 0); \
@@ -394,17 +552,11 @@ uprof_context_output_report (UProfContext *context);
       } \
   } while (0)
 
-/* TODO: */
-#if 0
-#define UPROF_TIMER_PAUSE()
-#define UPROF_TIMER_CONTINUE()
-#endif
-
-
+/* XXX: We should consider system counter wrap around issues */
 
 /**
- * uprof_context_add_report_warning:
- * @context: A uprof context
+ * uprof_context_add_report_message:
+ * @context: A UProfContext
  * @format: A printf style format string
  *
  * This function queues a message to be output when uprof generates its
@@ -413,10 +565,32 @@ uprof_context_output_report (UProfContext *context);
 void
 uprof_context_add_report_message (UProfContext *context,
                                   const char *format, ...);
-
+/**
+ * uprof_context_suspend:
+ * @context: A UProfContext
+ *
+ * Disables all timer and counter accounting for a context and all linked
+ * contexts. This can be used to precisely control what you profile. For
+ * example in Clutter if we want to focus on input handling we suspend the
+ * context early on during library initialization and only resume it while
+ * processing input.
+ *
+ * You can suspend a context multiple times, and it will only resume with an
+ * equal number of calls to uprof_context_resume()
+ */
 void
 uprof_suspend_context (UProfContext *context);
 
+/**
+ * uprof_context_resume:
+ * @context: A uprof context
+ *
+ * Re-Enables all timer and counter accounting for a context (and all linked
+ * contexts) if previously disabled with a call to uprof_context_suspend().
+ *
+ * You can suspend a context multiple times, and it will only resume with an
+ * equal number of calls to uprof_context_resume()
+ */
 void
 uprof_resume_context (UProfContext *context);
 
@@ -424,15 +598,47 @@ uprof_resume_context (UProfContext *context);
  * Support for reporting results:
  */
 
+/**
+ * uprof_report_new:
+ * @name: The name of the report
+ *
+ * Creates an object representing a UProf report. You should associate the
+ * contexts that you want to generate a report for with this object using
+ * uprof_report_add_context() before generating a report via
+ * uprof_report_print()
+ *
+ * Returns: A new UProfReport object
+ */
 UProfReport *
 uprof_report_new (const char *name);
 
+/**
+ * uprof_report_ref:
+ * @report: A UProfReport object
+ *
+ * Increases the reference count of a UProfReport object.
+ */
 UProfReport *
 uprof_report_ref (UProfReport *report);
 
+/**
+ * uprof_report_unref:
+ * @report: A UProfReport object
+ *
+ * Decreases the reference count of a UProfReport object. When the reference
+ * count reaches 0 its associated resources will be freed.
+ */
 void
 uprof_report_unref (UProfReport *report);
 
+/**
+ * uprof_report_add_context:
+ * @report: A UProfReport object
+ * @context: a UProfContext object
+ *
+ * Associates a context with a report object so that when the report is
+ * generated it will include statistics relating to this context.
+ */
 void
 uprof_report_add_context (UProfReport *report,
                           UProfContext *context);
@@ -453,7 +659,7 @@ typedef char *(*UProfReportTimersAttributeCallback) (UProfTimerResult *result);
 
 /**
  * uprof_context_add_counters_attribute:
- * @context: A UProf context
+ * @report: A UProfReport
  * @attribute_name: The name of the attribute
  * @callback: A function called for each counter being reported
  *
@@ -469,8 +675,8 @@ uprof_report_add_counters_attribute (UProfReport *report,
                                      void *user_data);
 
 /**
- * uprof_context_remove_counters_attribute:
- * @context: A UProf context
+ * uprof_report_remove_counters_attribute:
+ * @report: A UProfReport
  * @id: The custom report column you want to remove
  *
  * Removes the custom counters @attribute from future reports generated
@@ -482,7 +688,7 @@ uprof_report_remove_counters_attribute (UProfReport *report,
 
 /**
  * uprof_report_add_timers_attribute:
- * @context: A UProf context
+ * @report: A UProfReport
  * @attribute_name: The name of the attribute
  * @callback: A function called for each timer being reported
  *
@@ -499,7 +705,7 @@ uprof_report_add_timers_attribute (UProfReport *report,
 
 /**
  * uprof_report_remove_timers_attribute:
- * @context: A UProf context
+ * @report: A UProfReport
  * @id: The custom report column you want to remove
  *
  * Removes the custom timers @attribute from future reports generated with
@@ -600,15 +806,15 @@ uprof_timer_result_print_and_children (UProfTimerResult              *timer,
                                        UProfTimerResultPrintCallback  callback,
                                        gpointer                       data);
 
+/**
+ * uprof_context_get_messages:
+ * @context: A UProfContext
+ *
+ * Returns: a list of messages previously logged using
+ * uprof_context_add_report_message()
+ */
 GList *
 uprof_context_get_messages (UProfContext *context);
-
-/* XXX: We should keep in mind the slightly thorny issues of handling shared
- * libraries, where various constants can dissapear as well as the timers
- * themselves. Since the UProf context is always on the heap, we can always
- * add some kind of uprof_context_internalize() mechanism later to ensure that
- * timer/counter statistics are never lost even though the underlying
- * timer structures may come and go. */
 
 /* XXX: We might want the ability to declare "alias" timers so that we
  * can track multiple (filename, line, function) constants for essentially
