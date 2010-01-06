@@ -307,7 +307,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_STATIC_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV) \
   static UPROF_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV)
 
-#define INIT_UNSEEN_COUNTER(CONTEXT, COUNTER_SYMBOL) \
+#define _UPROF_INIT_UNSEEN_COUNTER(CONTEXT, COUNTER_SYMBOL) \
   do { \
     (COUNTER_SYMBOL).filename = __FILE__; \
     (COUNTER_SYMBOL).line = __LINE__; \
@@ -325,7 +325,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_COUNTER_INC(CONTEXT, COUNTER_SYMBOL) \
   do { \
     if (!(COUNTER_SYMBOL).state) \
-      INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL); \
+      _UPROF_INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL); \
     if ((COUNTER_SYMBOL).state->disabled) \
       break; \
     (COUNTER_SYMBOL).state->count++; \
@@ -341,7 +341,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_COUNTER_DEC(CONTEXT, COUNTER_SYMBOL) \
   do { \
     if (!(COUNTER_SYMBOL).state) \
-      INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL) \
+      _UPROF_INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL) \
     if ((COUNTER_SYMBOL).state->disabled) \
       break; \
     (COUNTER_SYMBOL).state->count--; \
@@ -357,7 +357,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_COUNTER_ZERO(CONTEXT, COUNTER_SYMBOL) \
   do { \
     if (!(COUNTER_SYMBOL).state) \
-      INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL) \
+      _UPROF_INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL) \
     if ((COUNTER_SYMBOL).state->disabled) \
       break; \
     (COUNTER_SYMBOL).state->count = 0; \
@@ -412,7 +412,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_STATIC_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV) \
   static UPROF_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV)
 
-#define INIT_UNSEEN_TIMER(CONTEXT, TIMER_SYMBOL) \
+#define _UPROF_INIT_UNSEEN_TIMER(CONTEXT, TIMER_SYMBOL) \
   do { \
     (TIMER_SYMBOL).filename = __FILE__; \
     (TIMER_SYMBOL).line = __LINE__; \
@@ -447,7 +447,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_TIMER_START(CONTEXT, TIMER_SYMBOL) \
   do { \
     if (!(TIMER_SYMBOL).state) \
-      INIT_UNSEEN_TIMER (CONTEXT, TIMER_SYMBOL); \
+      _UPROF_INIT_UNSEEN_TIMER (CONTEXT, TIMER_SYMBOL); \
     if (!(TIMER_SYMBOL).state->disabled) \
       { \
         DEBUG_CHECK_FOR_RECURSION (CONTEXT, TIMER_SYMBOL); \
@@ -468,7 +468,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_RECURSIVE_TIMER_START(CONTEXT, TIMER_SYMBOL) \
   do { \
     if (!(TIMER_SYMBOL).state) \
-      INIT_UNSEEN_TIMER (CONTEXT, TIMER_SYMBOL); \
+      _UPROF_INIT_UNSEEN_TIMER (CONTEXT, TIMER_SYMBOL); \
     if (!(TIMER_SYMBOL).state->disabled) \
       { \
         if ((TIMER_SYMBOL).state->recursion++ == 0) \
