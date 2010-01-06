@@ -1,0 +1,15 @@
+UProf 0.2
+=========
+
+UProf is an open source library providing a toolkit to assist in profiling
+applications in a domain specific way and generating reports than can quickly
+be digested and discussed.
+
+UProf currently requires:
+
+  • GLib
+
+If you are building the API reference you will also need:
+
+  • GTK-Doc
+
