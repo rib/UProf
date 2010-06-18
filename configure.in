@@ -79,8 +79,6 @@ AC_SUBST(UPROF_LT_REVISION)
 AC_SUBST(UPROF_LT_AGE)
 AC_SUBST(UPROF_LT_RELEASE)
 
-AM_MAINTAINER_MODE
-
 
 dnl ================================================================
 dnl Handle extra configure options
