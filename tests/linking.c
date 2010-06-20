@@ -23,6 +23,10 @@ UPROF_STATIC_TIMER (full_timer,
                     0 /* no application private data */
 );
 
+/*
+ * context 0
+ */
+
 UPROF_STATIC_COUNTER (loop0_counter,
                       "Loop0 counter",
                       "A Counter for the first loop",
@@ -43,6 +47,10 @@ UPROF_STATIC_TIMER (loop0_sub_timer,
                     0 /* no application private data */
 );
 
+/*
+ * context 1
+ */
+
 UPROF_STATIC_COUNTER (loop1_counter,
                       "Loop1 counter",
                       "A Counter for the first loop",
@@ -60,6 +68,13 @@ UPROF_STATIC_TIMER (loop1_sub_timer,
                     "Loop1 timer", /* parent */
                     "Loop1 sub timer",
                     "An example sub timer for loop1",
+                    0 /* no application private data */
+);
+
+UPROF_STATIC_TIMER (top_timer,
+                    NULL, /* no parent */
+                    "A Top level timer",
+                    "A top level timer in the linked context",
                     0 /* no application private data */
 );
 
@@ -105,6 +120,7 @@ main (int argc, char **argv)
                   uprof_get_system_counter ());
     }
 
+  UPROF_TIMER_START (context1, top_timer);
   for (i = 0; i < 4; i ++)
     {
       struct timespec delay;
@@ -129,6 +145,7 @@ main (int argc, char **argv)
       DBG_PRINTF ("stop simple timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
                   uprof_get_system_counter ());
     }
+  UPROF_TIMER_STOP (context1, top_timer);
 
   DBG_PRINTF ("stop full timer (rdtsc = %" G_GUINT64_FORMAT ")\n",
               uprof_get_system_counter ());
