@@ -55,6 +55,34 @@
 
 #define UPROF_OBJECT_STATE(X) ((UProfObjectState *)X)
 
+typedef struct _UProfPrintReportRecord
+{
+  int    height;
+  GList *entries;
+  void  *data; /* timer / counter */
+} UProfPrintReportRecord;
+
+#if 0
+typedef enum
+{
+  UPROF_ALIGNMENT_LEFT,
+  UPROF_ALIGNMENT_RIGHT,
+  UPROF_ALIGNMENT_CENTER
+} UProfAlignment;
+#endif
+
+typedef struct _UProfPrintReportEntry
+{
+  int            width;
+  int            height;
+#if 0
+  UProfAlignment alignment;
+#endif
+  gboolean       is_percentage;
+  float          percentage;
+  char         **lines;
+} UProfPrintReportEntry;
+
 typedef struct _UProfTimerAttribute
 {
   char *name;
@@ -580,9 +608,11 @@ static const char *bars[] = {
     "█"
 };
 
-void
-uprof_print_percentage_bar (float percent)
+/* Note: This returns a bar 45 characters wide for 100% */
+char *
+get_percentage_bar (float percent)
 {
+  GString *bar = g_string_new ("");
   int bar_len = 3.6 * percent;
   int bar_char_len = bar_len / 8;
   int i;
@@ -591,13 +621,43 @@ uprof_print_percentage_bar (float percent)
     bar_char_len++;
 
   for (i = bar_len; i >= 8; i -= 8)
-    g_printf ("%s", bars[8]);
+    g_string_append_printf (bar, "%s", bars[8]);
   if (i)
-    g_printf ("%s", bars[i]);
+    g_string_append_printf (bar, "%s", bars[i]);
 
-  /* NB: We can't use a field width with utf8 so we manually
-   * guarantee a field with of 45 chars for any bar. */
-  g_print ("%*s", (45 - bar_char_len), "");
+  return g_string_free (bar, FALSE);
+}
+
+void
+uprof_print_percentage_bar (float percent)
+{
+  char *percentage_bar = get_percentage_bar (percent);
+
+  g_print ("%s", percentage_bar);
+  g_free (percentage_bar);
+}
+
+static int
+utf8_width (char *utf8_string)
+{
+  glong n_chars;
+  gunichar *ucs4_string = g_utf8_to_ucs4_fast (utf8_string, -1, &n_chars);
+  int i;
+  int len = 0;
+
+  for (i = 0; i < n_chars; i++)
+    {
+      if (g_unichar_iswide (ucs4_string[i]))
+        len += 2;
+      else if (g_unichar_iszerowidth (ucs4_string[i]))
+        continue;
+      else
+        len++;
+    }
+
+  g_free (ucs4_string);
+
+  return len;
 }
 
 static int
@@ -605,7 +665,7 @@ get_name_size_for_timer_and_children (UProfTimerResult *timer,
                                       int indent_level)
 {
   int max_name_size =
-    (indent_level * 2) + strlen (UPROF_OBJECT_STATE (timer)->name);
+    (indent_level * 2) + utf8_width (UPROF_OBJECT_STATE (timer)->name);
   GList *l;
 
   for (l = timer->children; l; l = l->next)
@@ -620,6 +680,7 @@ get_name_size_for_timer_and_children (UProfTimerResult *timer,
   return max_name_size;
 }
 
+/* XXX: Only used to support deprecated API */
 static void
 print_timer_and_children (UProfReport                   *report,
                           UProfTimerResult              *timer,
@@ -684,6 +745,7 @@ print_timer_and_children (UProfReport                   *report,
   g_free (extra_fields);
 }
 
+/* XXX: Deprecated API */
 void
 uprof_timer_result_print_and_children (UProfTimerResult              *timer,
                                        UProfTimerResultPrintCallback  callback,
@@ -1166,6 +1228,40 @@ uprof_report_remove_context_callback (UProfReport *report,
 }
 
 void
+uprof_report_add_counters_attribute (UProfReport *report,
+                                     const char *attribute_name,
+                                     UProfReportCountersAttributeCallback callback,
+                                     void *user_data)
+{
+  UProfCounterAttribute *attribute = g_slice_new (UProfCounterAttribute);
+  attribute->name = g_strdup (attribute_name);
+  attribute->callback = callback;
+  attribute->user_data = user_data;
+  report->counter_attributes =
+    g_list_append (report->counter_attributes, attribute);
+}
+
+void
+uprof_report_remove_counters_attribute (UProfReport *report,
+                                        const char *attribute_name)
+{
+  GList *l;
+
+  for (l = report->counter_attributes; l; l = l->next)
+    {
+      UProfCounterAttribute *attribute = l->data;
+      if (strcmp (attribute->name, attribute_name) == 0)
+        {
+          g_free (attribute->name);
+          g_slice_free (UProfCounterAttribute, attribute);
+          report->counter_attributes =
+            g_list_delete_link (report->counter_attributes, l);
+          return;
+        }
+    }
+}
+
+void
 uprof_report_add_timers_attribute (UProfReport *report,
                                    const char *attribute_name,
                                    UProfReportTimersAttributeCallback callback,
@@ -1176,7 +1272,7 @@ uprof_report_add_timers_attribute (UProfReport *report,
   attribute->callback = callback;
   attribute->user_data = user_data;
   report->timer_attributes =
-    g_list_prepend (report->timer_attributes, attribute);
+    g_list_append (report->timer_attributes, attribute);
 }
 
 void
@@ -1199,41 +1295,409 @@ uprof_report_remove_timers_attribute (UProfReport *report,
     }
 }
 
-static void
-default_print_counter (UProfCounterResult *counter,
-                       gpointer            data)
+typedef struct
 {
-  gulong count = uprof_counter_result_get_count (counter);
-  if (count == 0)
-    return;
+  UProfReport *report;
+  GList **records;
+} AddCounterState;
 
-  g_print ("   %-*s%-5ld\n", REPORT_COLUMN0_WIDTH - 2,
-           uprof_counter_result_get_name (counter),
-           uprof_counter_result_get_count (counter));
+static void
+add_counter_record (UProfCounterResult *counter,
+                    gpointer            data)
+{
+  AddCounterState        *state = data;
+  UProfReport            *report = state->report;
+  GList                 **records = state->records;
+  UProfPrintReportRecord *record;
+  UProfPrintReportEntry  *entry;
+  char                   *lines;
+  GList                  *l;
+
+  record = g_slice_new0 (UProfPrintReportRecord);
+
+  entry = g_slice_new0 (UProfPrintReportEntry);
+  lines = g_strdup_printf ("%s", uprof_counter_result_get_name (counter));
+  entry->lines = g_strsplit (lines, "\n", 0);
+  g_free (lines);
+  record->entries = g_list_prepend (record->entries, entry);
+
+  entry = g_slice_new0 (UProfPrintReportEntry);
+  lines = g_strdup_printf ("%lu", uprof_counter_result_get_count (counter));
+  entry->lines = g_strsplit (lines, "\n", 0);
+  g_free (lines);
+  record->entries = g_list_prepend (record->entries, entry);
+
+  for (l = report->counter_attributes; l; l = l->next)
+    {
+      UProfCounterAttribute *attribute = l->data;
+      entry = g_slice_new0 (UProfPrintReportEntry);
+      lines = attribute->callback (counter, attribute->user_data);
+      entry->lines = g_strsplit (lines, "\n", 0);
+      g_free (lines);
+      record->entries = g_list_prepend (record->entries, entry);
+    }
+
+  record->entries = g_list_reverse (record->entries);
+  record->data = counter;
+
+  *records = g_list_prepend (*records, record);
 }
 
 static void
-default_report_context (UProfContext *context)
+prepare_print_records_for_counters (UProfReport *report,
+                                    UProfContext *context,
+                                    GList **records)
 {
+  AddCounterState state;
+  state.report = report;
+  state.records = records;
+  uprof_context_foreach_counter (context,
+                                 UPROF_COUNTER_SORT_COUNT_INC,
+                                 add_counter_record,
+                                 &state);
+}
+
+static void
+print_record_entries (UProfPrintReportRecord *record)
+{
+  int line;
+  GList *l;
+
+  for (line = 0; line < record->height; line++)
+    {
+      for (l = record->entries; l; l = l->next)
+        {
+          UProfPrintReportEntry *entry = l->data;
+          if (entry->height < (line + 1))
+            g_print ("%-*s ", entry->width, "");
+          else
+            {
+              /* XXX: printf field widths are byte not character oriented
+               * so we have to consider multi-byte utf8 characters. */
+              int field_width =
+                strlen (entry->lines[line]) +
+                (entry->width - utf8_width (entry->lines[line]));
+              g_printf ("%-*s ", field_width, entry->lines[line]);
+            }
+        }
+      g_print ("\n");
+    }
+}
+
+static void
+print_counter_record (UProfPrintReportRecord *record)
+{
+  UProfCounterResult *counter = record->data;
+
+  if (counter && counter->count == 0)
+    return;
+
+  print_record_entries (record);
+
+  /* XXX: We currently pass a NULL timer for the first record which contains
+   * the column titles... */
+  if (counter == NULL)
+    g_print ("\n");
+}
+
+static void
+default_print_counter_records (GList *records)
+{
+  GList *l;
+
+  for (l = records; l; l = l->next)
+    print_counter_record (l->data);
+}
+
+static void
+prepare_print_records_for_timer_and_children (UProfReport *report,
+                                              UProfTimerResult *timer,
+                                              int indent_level,
+                                              GList **records)
+{
+  UProfPrintReportRecord *record;
+  UProfPrintReportEntry  *entry;
+  int                     indent;
+  char                   *lines;
+  UProfTimerResult       *root;
+  float                   percent;
+  GList                  *l;
+  GList                  *children;
+
+  record = g_slice_new0 (UProfPrintReportRecord);
+
+  indent = indent_level * 2; /* 2 spaces per indent level */
+  entry = g_slice_new0 (UProfPrintReportEntry);
+  lines = g_strdup_printf ("%*s%-*s",
+                           indent, "",
+                           report->max_timer_name_size + 1 - indent,
+                           timer->object.name);
+  entry->lines = g_strsplit (lines, "\n", 0);
+  g_free (lines);
+  record->entries = g_list_prepend (record->entries, entry);
+
+  entry = g_slice_new0 (UProfPrintReportEntry);
+  lines = g_strdup_printf ("%-.2f",
+                           ((float)timer->total /
+                            uprof_get_system_counter_hz()) * 1000.0);
+  entry->lines = g_strsplit (lines, "\n", 0);
+  g_free (lines);
+  record->entries = g_list_prepend (record->entries, entry);
+
+  for (l = report->timer_attributes; l; l = l->next)
+    {
+      UProfTimerAttribute *attribute = l->data;
+      entry = g_slice_new0 (UProfPrintReportEntry);
+      lines = attribute->callback (timer, attribute->user_data);
+      entry->lines = g_strsplit (lines, "\n", 0);
+      g_free (lines);
+      record->entries = g_list_prepend (record->entries, entry);
+    }
+
+  /* percentages are reported relative to the root timer */
+  root = uprof_timer_result_get_root (timer);
+  percent = ((float)timer->total / (float)root->total) * 100.0;
+
+  entry = g_slice_new0 (UProfPrintReportEntry);
+  lines = g_strdup_printf ("%7.3f%%", percent);
+  entry->lines = g_strsplit (lines, "\n", 0);
+  g_free (lines);
+  entry->is_percentage = TRUE;
+  entry->percentage = percent;
+  record->entries = g_list_prepend (record->entries, entry);
+
+  entry = g_slice_new0 (UProfPrintReportEntry);
+  lines = get_percentage_bar (percent);
+  entry->lines = g_strsplit (lines, "\n", 0);
+  g_free (lines);
+  record->entries = g_list_prepend (record->entries, entry);
+
+  record->entries = g_list_reverse (record->entries);
+  record->data = timer;
+
+  *records = g_list_prepend (*records, record);
+
+  children = uprof_timer_result_get_children (timer);
+  children = g_list_sort_with_data (children,
+                                    UPROF_TIMER_SORT_TIME_INC,
+                                    NULL);
+  for (l = children; l; l = l->next)
+    {
+      UProfTimerState *child = l->data;
+
+      prepare_print_records_for_timer_and_children (report,
+                                                    child,
+                                                    indent_level + 1,
+                                                    records);
+    }
+  g_list_free (children);
+}
+
+static void
+size_record_entries (GList *records)
+{
+  UProfPrintReportRecord *record;
+  int entries_per_record;
+  int *column_width;
+  GList *l;
+
+  if (!records)
+    return;
+
+  /* All records should have the same number of entries */
+  record = records->data;
+  entries_per_record = g_list_length (record->entries);
+  column_width = g_new0 (int, entries_per_record);
+
+  for (l = records; l; l = l->next)
+    {
+      GList *l2;
+      int i;
+
+      record = l->data;
+
+      for (l2 = record->entries, i = 0; l2; l2 = l2->next, i++)
+        {
+          UProfPrintReportEntry *entry = l2->data;
+          int line;
+
+          g_assert (i < entries_per_record);
+
+          for (line = 0; entry->lines[line]; line++)
+            entry->width = MAX (entry->width, utf8_width (entry->lines[line]));
+
+          column_width[i] = MAX (column_width[i], entry->width);
+
+          entry->height = line;
+          record->height = MAX (record->height, entry->height);
+        }
+    }
+
+  for (l = records; l; l = l->next)
+    {
+      GList *l2;
+      int i;
+
+      record = l->data;
+
+      for (l2 = record->entries, i = 0; l2; l2 = l2->next, i++)
+        {
+          UProfPrintReportEntry *entry = l2->data;
+          entry->width = column_width[i];
+        }
+    }
+
+  g_free (column_width);
+}
+
+static void
+print_timer_record (UProfPrintReportRecord *record)
+{
+  UProfTimerResult  *timer = record->data;
+
+  if (timer && timer->count == 0)
+    return;
+
+  print_record_entries (record);
+
+  /* XXX: We currently pass a NULL timer for the first record which contains
+   * the column titles... */
+  if (timer == NULL)
+    g_print ("\n");
+}
+
+static void
+default_print_timer_records (GList *records)
+{
+  GList *l;
+
+  for (l = records; l; l = l->next)
+    print_timer_record (l->data);
+}
+
+static void
+free_print_records (GList *records)
+{
+  GList *l;
+  for (l = records; l; l = l->next)
+    {
+      GList *l2;
+      UProfPrintReportRecord *record = l->data;
+      for (l2 = record->entries; l2; l2 = l2->next)
+        {
+          UProfPrintReportEntry *entry = l2->data;
+          g_strfreev (entry->lines);
+          g_slice_free (UProfPrintReportEntry, entry);
+        }
+      g_slice_free (UProfPrintReportRecord, l->data);
+    }
+  g_list_free (records);
+}
+
+static void
+default_report_context (UProfReport *report, UProfContext *context)
+{
+  GList *records = NULL;
+  UProfPrintReportRecord *record;
+  UProfPrintReportEntry *entry;
   GList *root_timers;
   GList *l;
 
-  g_print (" context: %s\n", context->name);
+  g_print ("context: %s\n", context->name);
   g_print ("\n");
-  g_print (" counters:\n");
+  g_print ("counters:\n");
 
-  uprof_context_foreach_counter (context,
-                                 UPROF_COUNTER_SORT_COUNT_INC,
-                                 default_print_counter,
-                                 NULL);
+  record = g_slice_new0 (UProfPrintReportRecord);
+
+  entry = g_slice_new0 (UProfPrintReportEntry);
+  entry->lines = g_strsplit ("Name", "\n", 0);
+  record->entries = g_list_prepend (record->entries, entry);
+
+  entry = g_slice_new0 (UProfPrintReportEntry);
+  entry->lines = g_strsplit ("Total", "\n", 0);
+  record->entries = g_list_prepend (record->entries, entry);
+
+  for (l = report->counter_attributes; l; l = l->next)
+    {
+      UProfCounterAttribute *attribute = l->data;
+
+      entry = g_slice_new0 (UProfPrintReportEntry);
+      entry->lines = g_strsplit (attribute->name, "\n", 0);
+      record->entries = g_list_prepend (record->entries, entry);
+    }
+
+  record->entries = g_list_reverse (record->entries);
+  record->data = NULL;
+
+  records = g_list_prepend (records, record);
+
+  prepare_print_records_for_counters (report, context, &records);
+
+  records = g_list_reverse (records);
+
+  size_record_entries (records);
+
+  default_print_counter_records (records);
+
+  free_print_records (records);
 
   g_print ("\n");
-  g_print (" timers:\n");
+  g_print ("timers:\n");
   g_assert (context->resolved);
+
   root_timers = uprof_context_get_root_timer_results (context);
-  for (l = context->root_timers; l != NULL; l = l->next)
-    uprof_timer_result_print_and_children ((UProfTimerResult *)l->data,
-                                           NULL, NULL);
+  for (l = root_timers; l != NULL; l = l->next)
+    {
+      UProfTimerResult *timer = l->data;
+      GList *l2;
+
+      records = NULL;
+
+      record = g_slice_new0 (UProfPrintReportRecord);
+
+      entry = g_slice_new0 (UProfPrintReportEntry);
+      entry->lines = g_strsplit ("Name", "\n", 0);
+      record->entries = g_list_prepend (record->entries, entry);
+
+      entry = g_slice_new0 (UProfPrintReportEntry);
+      entry->lines = g_strsplit ("Total\nmsecs", "\n", 0);
+      record->entries = g_list_prepend (record->entries, entry);
+
+      for (l2 = report->timer_attributes; l2; l2 = l2->next)
+        {
+          UProfTimerAttribute *attribute = l2->data;
+
+          entry = g_slice_new0 (UProfPrintReportEntry);
+          entry->lines = g_strsplit (attribute->name, "\n", 0);
+          record->entries = g_list_prepend (record->entries, entry);
+        }
+
+      entry = g_slice_new0 (UProfPrintReportEntry);
+      entry->lines = g_strsplit ("Percent", "\n", 0);
+      record->entries = g_list_prepend (record->entries, entry);
+
+      /* We need a dummy entry for the last percentage bar column because
+       * every record is expected to have the same number of entries. */
+      entry = g_slice_new0 (UProfPrintReportEntry);
+      entry->lines = g_strsplit ("", "\n", 0);
+      record->entries = g_list_prepend (record->entries, entry);
+
+      record->entries = g_list_reverse (record->entries);
+      record->data = NULL;
+
+      records = g_list_prepend (records, record);
+
+      prepare_print_records_for_timer_and_children (report, timer,
+                                                    0, &records);
+
+      records = g_list_reverse (records);
+
+      size_record_entries (records);
+
+      default_print_timer_records (records);
+      free_print_records (records);
+    }
+  g_list_free (root_timers);
 }
 
 static void
@@ -1245,7 +1709,7 @@ report_context (UProfReport *report, UProfContext *context)
 
   if (!report->context_callbacks)
     {
-      default_report_context (context);
+      default_report_context (report, context);
       return;
     }
 

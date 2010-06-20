@@ -34,6 +34,12 @@ uprof_report_new
 uprof_report_ref
 uprof_report_unref
 uprof_report_add_context
+UProfReportCountersAttributeCallback
+uprof_report_add_counters_attribute
+uprof_report_remove_counters_attribute
+UProfReportTimersAttributeCallback
+uprof_report_add_timers_attribute
+uprof_report_remove_timers_attribute
 uprof_report_print
 
 </SECTION>

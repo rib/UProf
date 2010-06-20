@@ -645,19 +645,55 @@ void
 uprof_report_remove_context_callback (UProfReport *report,
                                       UProfReportContextCallback callback);
 
-typedef char *(*UProfReportCountersAttributeCallback) (UProfCounterResult *result);
-typedef char *(*UProfReportTimersAttributeCallback) (UProfTimerResult *result);
+/**
+ * UProfReportCountersAttributeCallback:
+ * @result: The current counter being reported
+ * @user_data: The private data previously passed to
+ *             uprof_report_add_counters_attribute()
+ *
+ * Use this prototype for the custom attribute callbacks. The string values
+ * that you return in your callback may be wrapped across multiple lines and
+ * uprof should still tabulate the report correctly. The
+ */
+typedef char *(*UProfReportCountersAttributeCallback) (UProfCounterResult *result,
+                                                       void *user_data);
 
 /**
- * uprof_context_add_counters_attribute:
+ * uprof_report_add_counters_attribute:
  * @report: A UProfReport
  * @attribute_name: The name of the attribute
  * @callback: A function called for each counter being reported
+ * @user_data: Private data passed back to your callback
  *
- * Adds a custom attribute to reports of counter statistics. The attribute name
- * can be wrapped with newline characters and the callback functions will be
- * called once for each timer being reported via a call to
- * uprof_context_output_report()
+ * Adds a custom attribute/column to reports of counter statistics. The
+ * attribute name can be wrapped with newline characters and the callback
+ * functions will be called once for each counter result reported while using
+ * uprof_report_print()
+ *
+ * The string values that you return in your callback may be wrapped across
+ * multiple lines and uprof should still tabulate the report correctly. The
+ * values should be freeable with g_free().
+ *
+ * For example:
+ * |[
+ * static char *double_count_cb (UProfCounterResult *counter, void *user_data)
+ * {
+ *   int count = uprof_counter_result_get_count (counter);
+ *   return g_strdup_printf ("%d", count * 2);
+ * }
+ *
+ * *snip*
+ *
+ * report = uprof_report_new ();
+ * report = uprof_report_new ("Simple report");
+ * uprof_report_add_counters_attribute (report, "Double\ncount",
+ *                                      double_count_cb, NULL);
+ * uprof_report_add_context (report, context);
+ * uprof_report_print (report);
+ * uprof_report_unref (report);
+ * ]|
+ *
+ * Since: 0.4
  */
 void
 uprof_report_add_counters_attribute (UProfReport *report,
@@ -678,15 +714,54 @@ uprof_report_remove_counters_attribute (UProfReport *report,
                                         const char *attribute_name);
 
 /**
+ * UProfReportTimersAttributeCallback:
+ * @result: The current timer being reported
+ * @user_data: The private data previously passed to
+ *             uprof_report_add_timers_attribute()
+ *
+ * Use this prototype for the custom attribute callbacks. The string values
+ * that you return in your callback may be wrapped across multiple lines and
+ * uprof should still tabulate the report correctly. The
+ */
+typedef char *(*UProfReportTimersAttributeCallback) (UProfTimerResult *result,
+                                                     void *user_data);
+
+/**
  * uprof_report_add_timers_attribute:
  * @report: A UProfReport
  * @attribute_name: The name of the attribute
  * @callback: A function called for each timer being reported
+ * @user_data: Private data passed back to your callback
  *
- * Adds a custom attribute to reports of timer statistics. The attribute name
- * can be wrapped with newline characters and the callback functions will be
- * called once for each timer being reported via a call to
- * uprof_context_output_report()
+ * Adds a custom attribute/column to reports of timer statistics. The attribute
+ * name can be wrapped with newline characters and the callback functions will
+ * be called once for each timer result reported while using
+ * uprof_report_print()
+ *
+ * The string values that you return in your callback may be wrapped across
+ * multiple lines and uprof should still tabulate the report correctly. The
+ * values should be freeable with g_free().
+ *
+ * For example:
+ * |[
+ * static char *half_time_cb (UProfTimerResult *timer, void *user_data)
+ * {
+ *   gulong msecs = uprof_timer_result_get_total_msecs (timer);
+ *   return g_strdup_printf ("%lu", msecs/2);
+ * }
+ *
+ * *snip*
+ *
+ * report = uprof_report_new ();
+ * report = uprof_report_new ("Simple report");
+ * uprof_report_add_timers_attribute (report, "Half\ntime",
+ *                                    half_time_cb, NULL);
+ * uprof_report_add_context (report, context);
+ * uprof_report_print (report);
+ * uprof_report_unref (report);
+ * ]|
+ *
+ * Since: 0.4
  */
 void
 uprof_report_add_timers_attribute (UProfReport *report,
