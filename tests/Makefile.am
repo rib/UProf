@@ -1,5 +1,5 @@
 
-noinst_PROGRAMS = simple suspend suspend2 dlopen recursion linking sanity_check
+noinst_PROGRAMS = simple suspend suspend2 dlopen recursion linking sanity_check custom-attributes
 
 AM_CFLAGS = \
 	    @EXTRA_CFLAGS@ \
@@ -12,6 +12,7 @@ AM_LDFLAGS = \
 	     $(top_builddir)/uprof/libuprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@.la
 
 simple_SOURCES = simple.c
+custom_attributes_SOURCES = custom-attributes.c
 suspend_SOURCES = suspend.c
 linking_SOURCES = linking.c
 dlopen_SOURCES = dlopen.c
