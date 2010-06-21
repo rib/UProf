@@ -255,25 +255,82 @@ void
 uprof_context_add_timer (UProfContext *context, UProfTimer *timer);
 
 /**
+ * uprof_get_mainloop_context:
+ *
+ * Returns the shared mainloop context which should be used by any
+ * code wanting to instrument its mainloop with timers.
+ *
+ * Because some libraries can either control their own mainloop or
+ * alternatively run under the control of an external mainloop UProf
+ * provides a shared context that is created during uprof_init () that
+ * can be linked into your application context just for the purpose of
+ * tracking mainloop statistics.
+ *
+ * If all components follow the convention of naming their mainloop
+ * timer "Mainloop" and their corresponding idle timer "Mainloop Idle"
+ * you can be sure that mainloop statistics can always be found in the
+ * same place regardless of who ends up owning the mainloop.
+ *
+ * Your application can declare still declare a mainloop timer using
+ * the usual macros like:
+ * |[
+ * CLUTTER_STATIC_TIMER (mainloop_timer,
+ *                       NULL, //no parent
+ *                       "Mainloop",
+ *                       "The time spent in the clutter mainloop",
+ *                       0);  // no application private data
+ * ]|
+ *
+ * but you would then start and stop the timer like:
+ * |[
+ * CLUTTER_TIMER_START (uprof_get_mainloop_context (), mainloop_timer);
+ * CLUTTER_TIMER_STOP (uprof_get_mainloop_context (), mainloop_timer);
+ * ]|
+ *
+ * Each uprof context that contains timers depending on the mainloop
+ * timer should make sure to link the mainloop context into their own
+ * context using uprof_context_link().
+ *
+ * Returns: A pointer to the shared mainloop context. Don't unref this
+ * context.
+ *
+ * Since: 0.4
+ */
+UProfContext *
+uprof_get_mainloop_context (void);
+
+/**
  * uprof_context_link:
  * @context: A UProfContext
  * @other: A UProf context whos timers and counters you want to be made
  *         available to @context.
  *
- * Links two contexts together so the timers and counters of the @other context
- * will become in a way part of the first @context - at least as far as
- * reporting is concerned. For example calling uprof_context_foreach_counter()
- * would iterate all the counters of other contexts linked to the given
- * context.
+ * Links two contexts together so the timers and counters of the
+ * @other context will become in a way part of the first @context - at
+ * least as far as reporting is concerned. For example calling
+ * uprof_context_foreach_counter() would iterate all the counters of
+ * other contexts linked to the given context.
  *
- * This can be useful if you are profiling a library that itself dynamically
- * loads a shared object (DSO), but you can't export a context symbol from the
- * library to the DSO because it happens that this DSO is also used by other
+ * One example for linking contexts is for mainloop based libraries
+ * that can optionally run under the control of an external mainloop.
+ * In this case where it can't be predetermined who will own the
+ * mainloop UProf provides a shared context just for the purpose of
+ * tracking mainloop statistics which by convention everyone should
+ * use. If you need to track mainloop statistics you should link
+ * UProf's mainloop context into your own. See
+ * uprof_get_mainloop_context() for more details.
+ *
+ * Another case where linking contexts can be useful is if you are
+ * profiling a library that itself dynamically loads a shared object
+ * (DSO), but you can't export a context symbol from the library to
+ * the DSO because it happens that this DSO is also used by other
  * libraries or applications which can't provide that symbol.
  *
- * The intention is to create a context that is owned by the DSO, and when we
- * end up loading the DSO in the library we are profiling we can link that
- * context into the real context.
+ * The idea is that the DSO can create its own UProf context without
+ * depending on a symbol being exported from the library and then that
+ * library can get a handle on the statistics collected by that
+ * library at runtime via UProf and link the DSO context into the
+ * library's context for reporting.
  *
  * An example of this is profiling a DRI driver which can be loaded by X
  * clients for direct rendering, or also by the X server for indirect

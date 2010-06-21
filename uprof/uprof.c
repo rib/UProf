@@ -153,6 +153,8 @@ static GList *_uprof_all_contexts;
 static clockid_t clockid;
 #endif
 
+UProfContext *mainloop_context = NULL;
+
 void
 uprof_init_real (void)
 {
@@ -178,6 +180,8 @@ uprof_init_real (void)
       g_warning ("Failed to query CLOCK_PROCESS_CPUTIME_ID clock: %s", str);
     }
 #endif
+
+  mainloop_context = uprof_context_new ("Mainloop context");
 }
 
 void
@@ -409,6 +413,12 @@ uprof_context_unref (UProfContext *context)
       _uprof_all_contexts = g_list_remove (_uprof_all_contexts, context);
       g_free (context);
     }
+}
+
+UProfContext *
+uprof_get_mainloop_context (void)
+{
+  return mainloop_context;
 }
 
 /* A counter or timer may be accessed from multiple places in source
