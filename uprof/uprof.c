@@ -1,5 +1,6 @@
 /* This file is part of UProf.
  *
+ * Copyright © 2006 OpenedHand
  * Copyright © 2008, 2009, 2010 Robert Bragg
  *
  * This library is free software; you can redistribute it and/or
@@ -153,7 +154,7 @@ static clockid_t clockid;
 #endif
 
 void
-uprof_init (int *argc, char ***argv)
+uprof_init_real (void)
 {
 #ifndef USE_RDTSC
   int ret;
@@ -177,6 +178,55 @@ uprof_init (int *argc, char ***argv)
       g_warning ("Failed to query CLOCK_PROCESS_CPUTIME_ID clock: %s", str);
     }
 #endif
+}
+
+void
+uprof_init (int *argc, char ***argv)
+{
+  uprof_init_real ();
+}
+
+static gboolean
+pre_parse_hook (GOptionContext  *context,
+                GOptionGroup    *group,
+                gpointer         data,
+                GError         **error)
+{
+  return TRUE;
+}
+
+static gboolean
+post_parse_hook (GOptionContext  *context,
+                 GOptionGroup    *group,
+                 gpointer         data,
+                 GError         **error)
+{
+  uprof_init_real ();
+  return TRUE;
+}
+
+static GOptionEntry uprof_args[] = {
+  { NULL, },
+};
+
+GOptionGroup *
+uprof_get_option_group (void)
+{
+  GOptionGroup *group;
+
+  group = g_option_group_new ("uprof",
+                              "UProf Options",
+                              "Show UProf Options",
+                              NULL,
+                              NULL);
+
+  g_option_group_set_parse_hooks (group, pre_parse_hook, post_parse_hook);
+  g_option_group_add_entries (group, uprof_args);
+#if 0
+  g_option_group_set_translation_domain (group, GETTEXT_PACKAGE);
+#endif
+
+  return group;
 }
 
 static void

@@ -89,6 +89,45 @@ void
 uprof_init (int *argc, char ***argv);
 
 /**
+ * uprof_get_option_group:
+ *
+ * Returns a #GOptionGroup for the command line arguments recognized
+ * by UProf. You should add this group to your #GOptionContext with
+ * g_option_context_add_group(), if you are using g_option_context_parse()
+ * to parse your commandline arguments.
+ *
+ * Calling g_option_context_parse() with UProf's #GOptionGroup will result
+ * in UProf's initialization. That is, the following code:
+ *
+ * |[
+ *   g_option_context_set_main_group (context, uprof_get_option_group ());
+ *   res = g_option_context_parse (context, &amp;argc, &amp;argc, NULL);
+ * ]|
+ *
+ * can be used to replace:
+ *
+ * |[
+ *   uprof_init (&amp;argc, &amp;argv);
+ * ]|
+ *
+ * A notable difference to calling uprof_init() directly though is
+ * that it's your responsibility to also add the #GOptionGroup<!--
+ * -->s for any of UProf's dependencies if you want to expose their
+ * configuration options.
+ *
+ * After g_option_context_parse() on a #GOptionContext containing the
+ * UProf #GOptionGroup has returned %TRUE, UProf is guaranteed to be
+ * initialized
+ *
+ * Return value: (transfer full): a #GOptionGroup for the commandline
+ *   arguments recognized by UProf
+ *
+ * Since: 0.4
+ */
+GOptionGroup *
+uprof_get_option_group (void);
+
+/**
  * uprof_get_system_counter:
  *
  * Gives direct access to the counter that uprof is using for timing.  On x86

@@ -2,6 +2,7 @@
 <FILE>uprof</FILE>
 UProfContext
 uprof_init
+uprof_get_option_group
 uprof_get_system_counter
 uprof_get_system_counter_hz
 uprof_context_new
