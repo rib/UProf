@@ -434,7 +434,19 @@ uprof_context_add_counter (UProfContext *context, UProfCounter *counter)
   /* We check if we have actually seen this counter before; it might be that
    * it belongs to a dynamic shared object that has been reloaded */
   UProfCounterState *state = find_uprof_counter_state (context, counter->name);
-  if (!state)
+
+  /* If we have seen this counter before see if it is being added from a
+   * new location and track that location if so.
+   */
+  if (G_UNLIKELY (state))
+    {
+      UProfObjectState *object = (UProfObjectState *)state;
+      object->locations = add_location (object->locations,
+                                        counter->filename,
+                                        counter->line,
+                                        counter->function);
+    }
+  else
     {
       UProfObjectState *object;
       state = g_slice_alloc0 (sizeof (UProfCounterState));
@@ -460,7 +472,19 @@ uprof_context_add_timer (UProfContext *context, UProfTimer *timer)
    * it belongs to a dynamic shared object that has been reloaded */
   UProfTimerState *state =
     uprof_context_get_timer_result (context, timer->name);
-  if (!state)
+
+  /* If we have seen this timer before see if it is being added from a
+   * new location and track that location if so.
+   */
+  if (G_UNLIKELY (state))
+    {
+      UProfObjectState *object = (UProfObjectState *)state;
+      object->locations = add_location (object->locations,
+                                        timer->filename,
+                                        timer->line,
+                                        timer->function);
+    }
+  else
     {
       UProfObjectState *object;
       state = g_slice_alloc0 (sizeof (UProfTimerState));
