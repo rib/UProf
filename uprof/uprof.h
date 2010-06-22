@@ -923,6 +923,9 @@ uprof_context_foreach_counter (UProfContext              *context,
                                UProfCounterResultCallback callback,
                                gpointer                   data);
 
+UProfCounterResult *
+uprof_context_get_counter_result (UProfContext *context, const char *name);
+
 UProfTimerResult *
 uprof_context_get_timer_result (UProfContext *context, const char *name);
 

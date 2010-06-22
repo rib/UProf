@@ -468,11 +468,11 @@ uprof_context_get_timer_result (UProfContext *context, const char *name)
   return (UProfTimerResult *)find_uprof_object_state (context->timers, name);
 }
 
-UProfCounterState *
-find_uprof_counter_state (UProfContext *context, const char *name)
+UProfCounterResult *
+uprof_context_get_counter_result (UProfContext *context, const char *name)
 {
-  return (UProfCounterState *)find_uprof_object_state (context->counters,
-                                                       name);
+  return (UProfCounterResult *)find_uprof_object_state (context->counters,
+                                                        name);
 }
 
 typedef struct
@@ -540,7 +540,8 @@ uprof_context_add_counter (UProfContext *context, UProfCounter *counter)
 {
   /* We check if we have actually seen this counter before; it might be that
    * it belongs to a dynamic shared object that has been reloaded */
-  UProfCounterState *state = find_uprof_counter_state (context, counter->name);
+  UProfCounterState *state =
+    uprof_context_get_counter_result (context, counter->name);
 
   /* If we have seen this counter before see if it is being added from a
    * new location and track that location if so.
