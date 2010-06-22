@@ -161,6 +161,11 @@ UProfContext *mainloop_context = NULL;
 void
 uprof_init_real (void)
 {
+  static gboolean initialized = FALSE;
+
+  if (initialized)
+    return;
+
 #ifndef USE_RDTSC
   int ret;
   struct timespec ts;
@@ -185,6 +190,7 @@ uprof_init_real (void)
 #endif
 
   mainloop_context = uprof_context_new ("Mainloop context");
+  initialized = TRUE;
 }
 
 void
