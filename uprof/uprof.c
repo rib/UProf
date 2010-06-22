@@ -935,7 +935,7 @@ copy_timers_list_cb (UProfContext *context, gpointer user_data)
 
 #ifdef DEBUG_TIMER_HEIRACHY
   g_print (" all %s timers:\n", context->name);
-  for (l = *all_timers; l != NULL; l = l->next)
+  for (l = context->timers; l != NULL; l = l->next)
     g_print ("  timer->name: %s\n", ((UProfObjectState *)l->data)->name);
 #endif
 
