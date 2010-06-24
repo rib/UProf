@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<node name="/">
+  <interface name="org.freedesktop.UProf.Reportable">
+    <method name="GetTextReport">
+      <arg type="s" direction="out"/>
+    </method>
+
+  </interface>
+</node>
+

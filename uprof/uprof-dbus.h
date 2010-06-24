@@ -1,6 +1,6 @@
 /* This file is part of UProf.
  *
- * Copyright © 2008, 2009 Robert Bragg
+ * Copyright © 2010 Robert Bragg
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,47 +18,26 @@
  * MA  02110-1301  USA
  */
 
-#ifndef _UPROF_PRIVATE_H_
-#define _UPROF_PRIVATE_H_
+#ifndef _UPROF_DBUS_H_
+#define _UPROF_DBUS_H_
 
-#include "uprof-service-private.h"
 #include <glib.h>
+#include <glib-object.h>
 
 G_BEGIN_DECLS
 
-struct _UProfContext
-{
-  guint  ref;
+char **
+uprof_dbus_list_reports (void);
 
-  char	*name;
+#if 0
+UProfDBusReportProxy *
+uprof_dbus_get_report_proxy (char *report_location);
+#endif
 
-  GList *links;
-
-  GList	*counters;
-  GList	*timers;
-
-  int disabled;
-
-  gboolean resolved;
-  GList *root_timers;
-
-  GList *report_messages;
-};
-
-typedef void (*UProfContextCallback) (UProfContext *context,
-                                      gpointer user_data);
-
-void
-_uprof_context_for_self_and_links_recursive (UProfContext *context,
-                                             UProfContextCallback callback,
-                                             gpointer user_data);
-
-UProfService *
-_uprof_get_service (void);
-
-guint64
-_uprof_timer_result_get_total (UProfTimerResult *timer_state);
+char *
+uprof_dbus_get_text_report (const char *bus_name, const char *report_name);
 
 G_END_DECLS
 
-#endif /* _UPROF_PRIVATE_H_ */
+#endif /* _UPROF_DBUS_H_ */
+

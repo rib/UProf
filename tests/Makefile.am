@@ -1,5 +1,5 @@
 
-noinst_PROGRAMS = simple suspend suspend2 dlopen recursion linking sanity_check custom-attributes
+noinst_PROGRAMS = simple suspend suspend2 suspend3 dlopen recursion linking sanity_check custom-attributes dbus-service
 
 AM_CFLAGS = \
 	    @EXTRA_CFLAGS@ \
@@ -14,6 +14,8 @@ AM_LDFLAGS = \
 simple_SOURCES = simple.c
 custom_attributes_SOURCES = custom-attributes.c
 suspend_SOURCES = suspend.c
+suspend2_SOURCES = suspend2.c
+suspend3_SOURCES = suspend3.c
 linking_SOURCES = linking.c
 dlopen_SOURCES = dlopen.c
 dlopen_LDFLAGS = \
@@ -21,6 +23,7 @@ dlopen_LDFLAGS = \
 		 $(AM_LDFLAGS)
 
 dlopen_LDADD = -ldl
+dbus_service_SOURCES = dbus-service.c
 
 all-local: module.so
 include ./$(DEPDIR)/module.Po

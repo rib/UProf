@@ -8,6 +8,7 @@ uprof_get_system_counter_hz
 uprof_context_new
 uprof_context_ref
 uprof_context_unref
+uprof_context_get_name
 
 UPROF_STATIC_COUNTER
 UPROF_COUNTER
@@ -34,6 +35,7 @@ uprof_context_resume
 uprof_report_new
 uprof_report_ref
 uprof_report_unref
+uprof_report_get_name
 uprof_report_add_context
 UProfReportCountersAttributeCallback
 uprof_report_add_counters_attribute

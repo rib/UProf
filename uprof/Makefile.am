@@ -1,10 +1,17 @@
 
 lib_LTLIBRARIES = libuprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@.la
 
-h_source = uprof.h uprof-private.h
+public_h_source = uprof.h uprof-report.h uprof-dbus.h
 libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_SOURCES = \
+	uprof-private.h \
 	uprof.c \
-	$(h_source)
+	uprof-service-private.h \
+	uprof-service.c \
+	uprof-report-private.h \
+	uprof-report.c \
+	uprof-dbus-private.h \
+	uprof-dbus.c \
+	$(public_h_source)
 
 libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_LIBADD = -lrt
 libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_LDFLAGS = \
@@ -20,11 +27,29 @@ libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_CPPFLAGS = \
     	-DUPROF_LOCALEDIR=\""$(uproflocaledir)"\" \
     	-DUPROF_BIN_DIR=\""$(bindir)"\" \
     	-I$(top_srcdir) \
-    	-I$(top_srcdir)/src \
+    	-I$(top_srcdir)/uprof \
     	@EXTRA_CPPFLAGS@
 
+bin_PROGRAMS = uprof-tool
+uprof_tool_SOURCES = uprof-tool.c
+uprof_tool_LDFLAGS = @UPROF_DEP_LIBS@ -luprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@
+uprof_tool_CFLAGS = @EXTRA_CFLAGS@ @UPROF_DEP_CFLAGS@
+uprof_tool_CPPFLAGS = @EXTRA_CPPFLAGS@
+
+uprof-service-glue.h: org.freedesktop.UProf.Service.xml Makefile.am
+	$(AM_V_GEN)dbus-binding-tool --prefix=_uprof_service --mode=glib-server --output=uprof-service-glue.h $(srcdir)/org.freedesktop.UProf.Service.xml
+
+uprof-reportable-glue.h: org.freedesktop.UProf.Reportable.xml Makefile.am
+	$(AM_V_GEN)dbus-binding-tool --prefix=_uprof_report --mode=glib-server --output=uprof-reportable-glue.h $(srcdir)/org.freedesktop.UProf.Reportable.xml
+
+#example-service-glue.h: example-service.xml Makefile.am
+#	libtool --mode=execute dbus-binding-tool --prefix=some_object --mode=glib-server --output=example-service-glue.h $(srcdir)/example-service.xml
+
+
+BUILT_SOURCES = uprof-service-glue.h uprof-reportable-glue.h
+
 uprofincludedir = $(includedir)/uprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@
-uprofinclude_HEADERS = $(h_source)
+uprofinclude_HEADERS = $(public_h_source)
 
 #EXTRA_DIST =
 

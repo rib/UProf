@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<node name="/">
+  <interface name="org.freedesktop.UProf.Service">
+    <method name="ListReports">
+      <arg type="as" direction="out"/>
+    </method>
+
+  </interface>
+</node>
+

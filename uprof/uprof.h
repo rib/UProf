@@ -21,12 +21,97 @@
 #ifndef _UPROF_H_
 #define _UPROF_H_
 
-#include <uprof-private.h>
+typedef struct _UProfContext UProfContext;
+
+#include <uprof-report.h>
+#include <uprof-dbus.h>
 
 #include <glib.h>
 #include <stdint.h>
 
 G_BEGIN_DECLS
+
+typedef struct _UProfObjectState
+{
+  /*< private >*/
+  UProfContext *context;
+
+  char  *name;
+  char  *description;
+  GList *locations;
+
+  unsigned long padding0;
+  unsigned long padding1;
+  unsigned long padding2;
+  unsigned long padding3;
+  unsigned long padding4;
+  unsigned long padding5;
+  unsigned long padding6;
+  unsigned long padding7;
+  unsigned long padding8;
+  unsigned long padding9;
+
+} UProfObjectState;
+
+typedef struct _UProfCounterState
+{
+  /*< private >*/
+  UProfObjectState  object;
+
+  gboolean          disabled;
+
+  unsigned long     count;
+
+  unsigned long padding0;
+  unsigned long padding1;
+  unsigned long padding2;
+  unsigned long padding3;
+  unsigned long padding4;
+  unsigned long padding5;
+  unsigned long padding6;
+  unsigned long padding7;
+  unsigned long padding8;
+  unsigned long padding9;
+
+} UProfCounterState;
+
+typedef struct _UProfTimerState UProfTimerState;
+struct _UProfTimerState
+{
+  /*< private >*/
+
+  UProfObjectState  object;
+
+  gboolean          disabled;
+  int               recursion;
+
+  char             *parent_name;
+
+  unsigned long     count;
+  guint64           start;
+  guint64           total;
+  guint64           partial_duration;
+
+  guint64           fastest;
+  guint64           slowest;
+
+  /* note: not resolved until sorting @ report time */
+  UProfTimerState  *parent;
+  GList            *children;
+
+  unsigned long padding0;
+  unsigned long padding1;
+  unsigned long padding2;
+  unsigned long padding3;
+  unsigned long padding4;
+  unsigned long padding5;
+  unsigned long padding6;
+  unsigned long padding7;
+  unsigned long padding8;
+  unsigned long padding9;
+};
+
+
 
 typedef struct _UProfCounter
 {
@@ -40,11 +125,22 @@ typedef struct _UProfCounter
   unsigned long priv;
 
   /** private */
-  UProfCounterState *state;
+  struct _UProfCounterState *state;
 
   const char *filename;
   unsigned long line;
   const char *function;
+
+  unsigned long padding0;
+  unsigned long padding1;
+  unsigned long padding2;
+  unsigned long padding3;
+  unsigned long padding4;
+  unsigned long padding5;
+  unsigned long padding6;
+  unsigned long padding7;
+  unsigned long padding8;
+  unsigned long padding9;
 
 } UProfCounter;
 
@@ -63,16 +159,33 @@ typedef struct _UProfTimer
   unsigned long priv;
 
   /** private */
-  UProfTimerState *state;
+  struct _UProfTimerState *state;
 
   const char *filename;
   unsigned long line;
   const char *function;
 
+  unsigned long padding0;
+  unsigned long padding1;
+  unsigned long padding2;
+  unsigned long padding3;
+  unsigned long padding4;
+  unsigned long padding5;
+  unsigned long padding6;
+  unsigned long padding7;
+  unsigned long padding8;
+  unsigned long padding9;
+
 } UProfTimer;
 
+#ifndef UPROT_COUNTER_RESULT_TYPEDEF
 typedef struct _UProfCounterState UProfCounterResult;
+#define UPROT_COUNTER_RESULT_TYPEDEF
+#endif
+#ifndef UPROT_TIMER_RESULT_TYPEDEF
 typedef struct _UProfTimerState   UProfTimerResult;
+#define UPROT_TIMER_RESULT_TYPEDEF
+#endif
 
 /**
  * uprof_init:
@@ -219,6 +332,19 @@ uprof_context_ref (UProfContext *context);
  */
 void
 uprof_context_unref (UProfContext *context);
+
+/**
+ * uprof_context_get_name:
+ * @context: A UProfContext
+ *
+ * Returns the name of the given @context. See uprof_context_new().
+ *
+ * Returns: The name of the given @context.
+ *
+ * Since: 0.4
+ */
+const char *
+uprof_context_get_name (UProfContext *context);
 
 /**
  * uprof_find_context:
@@ -404,7 +530,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_STATIC_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV) \
   static UPROF_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV)
 
-#define _UPROF_INIT_UNSEEN_COUNTER(CONTEXT, COUNTER_SYMBOL) \
+#define _UPROF_COUNTER_INIT_IF_UNSEEN(CONTEXT, COUNTER_SYMBOL) \
   do { \
     (COUNTER_SYMBOL).filename = __FILE__; \
     (COUNTER_SYMBOL).line = __LINE__; \
@@ -422,7 +548,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_COUNTER_INC(CONTEXT, COUNTER_SYMBOL) \
   do { \
     if (!(COUNTER_SYMBOL).state) \
-      _UPROF_INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL); \
+      _UPROF_COUNTER_INIT_IF_UNSEEN (CONTEXT, COUNTER_SYMBOL); \
     if ((COUNTER_SYMBOL).state->disabled) \
       break; \
     (COUNTER_SYMBOL).state->count++; \
@@ -438,7 +564,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_COUNTER_DEC(CONTEXT, COUNTER_SYMBOL) \
   do { \
     if (!(COUNTER_SYMBOL).state) \
-      _UPROF_INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL) \
+      _UPROF_COUNTER_INIT_IF_UNSEEN (CONTEXT, COUNTER_SYMBOL) \
     if ((COUNTER_SYMBOL).state->disabled) \
       break; \
     (COUNTER_SYMBOL).state->count--; \
@@ -454,7 +580,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_COUNTER_ZERO(CONTEXT, COUNTER_SYMBOL) \
   do { \
     if (!(COUNTER_SYMBOL).state) \
-      _UPROF_INIT_UNSEEN_COUNTER (CONTEXT, COUNTER_SYMBOL) \
+      _UPROF_COUNTER_INIT_IF_UNSEEN (CONTEXT, COUNTER_SYMBOL) \
     if ((COUNTER_SYMBOL).state->disabled) \
       break; \
     (COUNTER_SYMBOL).state->count = 0; \
@@ -509,7 +635,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_STATIC_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV) \
   static UPROF_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV)
 
-#define _UPROF_INIT_UNSEEN_TIMER(CONTEXT, TIMER_SYMBOL) \
+#define _UPROF_TIMER_INIT_IF_UNSEEN(CONTEXT, TIMER_SYMBOL) \
   do { \
     (TIMER_SYMBOL).filename = __FILE__; \
     (TIMER_SYMBOL).line = __LINE__; \
@@ -518,7 +644,7 @@ uprof_context_output_report (UProfContext *context);
   } while (0)
 
 #ifdef UPROF_DEBUG
-#define DEBUG_CHECK_FOR_RECURSION(CONTEXT, TIMER_SYMBOL) \
+#define _UPROF_TIMER_DEBUG_CHECK_FOR_RECURSION(CONTEXT, TIMER_SYMBOL) \
   do { \
     if ((TIMER_SYMBOL).state->start) \
       { \
@@ -529,7 +655,7 @@ uprof_context_output_report (UProfContext *context);
       } \
   } while (0)
 #else
-#define DEBUG_CHECK_FOR_RECURSION(CONTEXT, TIMER_SYMBOL)
+#define _UPROF_TIMER_DEBUG_CHECK_FOR_RECURSION(CONTEXT, TIMER_SYMBOL)
 #endif
 
 /**
@@ -544,8 +670,8 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_TIMER_START(CONTEXT, TIMER_SYMBOL) \
   do { \
     if (!(TIMER_SYMBOL).state) \
-      _UPROF_INIT_UNSEEN_TIMER (CONTEXT, TIMER_SYMBOL); \
-    DEBUG_CHECK_FOR_RECURSION (CONTEXT, TIMER_SYMBOL); \
+      _UPROF_TIMER_INIT_IF_UNSEEN (CONTEXT, TIMER_SYMBOL); \
+    _UPROF_TIMER_DEBUG_CHECK_FOR_RECURSION (CONTEXT, TIMER_SYMBOL); \
     (TIMER_SYMBOL).state->start = uprof_get_system_counter (); \
   } while (0)
 
@@ -562,7 +688,7 @@ uprof_context_output_report (UProfContext *context);
 #define UPROF_RECURSIVE_TIMER_START(CONTEXT, TIMER_SYMBOL) \
   do { \
     if (!(TIMER_SYMBOL).state) \
-      _UPROF_INIT_UNSEEN_TIMER (CONTEXT, TIMER_SYMBOL); \
+      _UPROF_TIMER_INIT_IF_UNSEEN (CONTEXT, TIMER_SYMBOL); \
     if ((TIMER_SYMBOL).state->recursion++ == 0) \
       { \
         (TIMER_SYMBOL).state->start = uprof_get_system_counter (); \
@@ -570,7 +696,7 @@ uprof_context_output_report (UProfContext *context);
   } while (0)
 
 #ifdef UPROF_DEBUG
-#define DEBUG_CHECK_TIMER_WAS_STARTED(CONTEXT, TIMER_SYMBOL) \
+#define _UPROF_TIMER_DEBUG_CHECK_TIMER_WAS_STARTED(CONTEXT, TIMER_SYMBOL) \
   do { \
     if (!(TIMER_SYMBOL).state->start) \
       { \
@@ -579,16 +705,34 @@ uprof_context_output_report (UProfContext *context);
       } \
   } while (0)
 #else
-#define DEBUG_CHECK_TIMER_WAS_STARTED(CONTEXT, TIMER_SYMBOL)
+#define _UPROF_TIMER_DEBUG_CHECK_TIMER_WAS_STARTED(CONTEXT, TIMER_SYMBOL)
 #endif
 
-#define COMPARE_AND_ADD_DURATION_TO_TOTAL(TIMER_SYMBOL) \
+#define _UPROF_TIMER_UPDATE_TOTAL_AND_CMP_FAST_SLOW(TIMER_SYMBOL) \
   do { \
     if (G_UNLIKELY (duration < (TIMER_SYMBOL).state->fastest)) \
       (TIMER_SYMBOL).state->fastest = duration; \
     else if (G_UNLIKELY (duration > (TIMER_SYMBOL).state->slowest)) \
       (TIMER_SYMBOL).state->slowest = duration; \
     (TIMER_SYMBOL).state->total += duration; \
+  } while (0)
+
+#define _UPROF_TIMER_UPDATE_TOTAL_FASTEST_SLOWEST(CONTEXT, TIMER_SYMBOL) \
+  do { \
+    if (G_LIKELY (!(TIMER_SYMBOL).state->disabled)) \
+      { \
+        guint64 duration = uprof_get_system_counter() - \
+                           (TIMER_SYMBOL).state->start + \
+                           (TIMER_SYMBOL).state->partial_duration; \
+        (TIMER_SYMBOL).state->partial_duration = 0; \
+        _UPROF_TIMER_UPDATE_TOTAL_AND_CMP_FAST_SLOW (TIMER_SYMBOL); \
+      } \
+    else if (G_UNLIKELY ((TIMER_SYMBOL).state->partial_duration)) \
+      { \
+        guint64 duration = (TIMER_SYMBOL).state->partial_duration; \
+        (TIMER_SYMBOL).state->partial_duration = 0; \
+        _UPROF_TIMER_UPDATE_TOTAL_AND_CMP_FAST_SLOW (TIMER_SYMBOL); \
+      } \
   } while (0)
 
 /**
@@ -603,19 +747,8 @@ uprof_context_output_report (UProfContext *context);
  */
 #define UPROF_TIMER_STOP(CONTEXT, TIMER_SYMBOL) \
   do { \
-    DEBUG_CHECK_TIMER_WAS_STARTED (CONTEXT, TIMER_SYMBOL); \
-    if (G_LIKELY (!(TIMER_SYMBOL).state->disabled)) \
-      { \
-        guint64 duration = uprof_get_system_counter() - \
-                           (TIMER_SYMBOL).state->start + \
-                           (TIMER_SYMBOL).state->partial_duration; \
-        COMPARE_AND_ADD_DURATION_TO_TOTAL (TIMER_SYMBOL); \
-      } \
-    else if (G_UNLIKELY ((TIMER_SYMBOL).state->partial_duration)) \
-      { \
-        guint64 duration = (TIMER_SYMBOL).state->partial_duration; \
-        COMPARE_AND_ADD_DURATION_TO_TOTAL (TIMER_SYMBOL); \
-      } \
+    _UPROF_TIMER_DEBUG_CHECK_TIMER_WAS_STARTED (CONTEXT, TIMER_SYMBOL); \
+    _UPROF_TIMER_UPDATE_TOTAL_FASTEST_SLOWEST (CONTEXT, TIMER_SYMBOL); \
     (TIMER_SYMBOL).state->count++; \
     (TIMER_SYMBOL).state->start = 0; \
   } while (0)
@@ -681,215 +814,16 @@ uprof_context_suspend (UProfContext *context);
 void
 uprof_context_resume (UProfContext *context);
 
-/*
- * Support for reporting results:
- */
-
-/**
- * uprof_report_new:
- * @name: The name of the report
- *
- * Creates an object representing a UProf report. You should associate the
- * contexts that you want to generate a report for with this object using
- * uprof_report_add_context() before generating a report via
- * uprof_report_print()
- *
- * Returns: A new UProfReport object
- */
-UProfReport *
-uprof_report_new (const char *name);
-
-/**
- * uprof_report_ref:
- * @report: A UProfReport object
- *
- * Increases the reference count of a UProfReport object.
- */
-UProfReport *
-uprof_report_ref (UProfReport *report);
-
-/**
- * uprof_report_unref:
- * @report: A UProfReport object
- *
- * Decreases the reference count of a UProfReport object. When the reference
- * count reaches 0 its associated resources will be freed.
- */
-void
-uprof_report_unref (UProfReport *report);
-
-/**
- * uprof_report_add_context:
- * @report: A UProfReport object
- * @context: a UProfContext object
- *
- * Associates a context with a report object so that when the report is
- * generated it will include statistics relating to this context.
- */
-void
-uprof_report_add_context (UProfReport *report,
-                          UProfContext *context);
-
-typedef void (*UProfReportContextCallback) (UProfReport *report,
-                                            UProfContext *context);
-
-void
-uprof_report_add_context_callback (UProfReport *report,
-                                   UProfReportContextCallback callback);
-
-void
-uprof_report_remove_context_callback (UProfReport *report,
-                                      UProfReportContextCallback callback);
-
-/**
- * UProfReportCountersAttributeCallback:
- * @result: The current counter being reported
- * @user_data: The private data previously passed to
- *             uprof_report_add_counters_attribute()
- *
- * Use this prototype for the custom attribute callbacks. The string values
- * that you return in your callback may be wrapped across multiple lines and
- * uprof should still tabulate the report correctly. The
- */
-typedef char *(*UProfReportCountersAttributeCallback) (UProfCounterResult *result,
-                                                       void *user_data);
-
-/**
- * uprof_report_add_counters_attribute:
- * @report: A UProfReport
- * @attribute_name: The name of the attribute
- * @callback: A function called for each counter being reported
- * @user_data: Private data passed back to your callback
- *
- * Adds a custom attribute/column to reports of counter statistics. The
- * attribute name can be wrapped with newline characters and the callback
- * functions will be called once for each counter result reported while using
- * uprof_report_print()
- *
- * The string values that you return in your callback may be wrapped across
- * multiple lines and uprof should still tabulate the report correctly. The
- * values should be freeable with g_free().
- *
- * For example:
- * |[
- * static char *double_count_cb (UProfCounterResult *counter, void *user_data)
- * {
- *   int count = uprof_counter_result_get_count (counter);
- *   return g_strdup_printf ("%d", count * 2);
- * }
- *
- * *snip*
- *
- * report = uprof_report_new ();
- * report = uprof_report_new ("Simple report");
- * uprof_report_add_counters_attribute (report, "Double\ncount",
- *                                      double_count_cb, NULL);
- * uprof_report_add_context (report, context);
- * uprof_report_print (report);
- * uprof_report_unref (report);
- * ]|
- *
- * Since: 0.4
- */
-void
-uprof_report_add_counters_attribute (UProfReport *report,
-                                     const char *attribute_name,
-                                     UProfReportCountersAttributeCallback callback,
-                                     void *user_data);
-
-/**
- * uprof_report_remove_counters_attribute:
- * @report: A UProfReport
- * @id: The custom report column you want to remove
- *
- * Removes the custom counters @attribute from future reports generated
- * with uprof_context_output_report()
- */
-void
-uprof_report_remove_counters_attribute (UProfReport *report,
-                                        const char *attribute_name);
-
-/**
- * UProfReportTimersAttributeCallback:
- * @result: The current timer being reported
- * @user_data: The private data previously passed to
- *             uprof_report_add_timers_attribute()
- *
- * Use this prototype for the custom attribute callbacks. The string values
- * that you return in your callback may be wrapped across multiple lines and
- * uprof should still tabulate the report correctly. The
- */
-typedef char *(*UProfReportTimersAttributeCallback) (UProfTimerResult *result,
-                                                     void *user_data);
-
-/**
- * uprof_report_add_timers_attribute:
- * @report: A UProfReport
- * @attribute_name: The name of the attribute
- * @callback: A function called for each timer being reported
- * @user_data: Private data passed back to your callback
- *
- * Adds a custom attribute/column to reports of timer statistics. The attribute
- * name can be wrapped with newline characters and the callback functions will
- * be called once for each timer result reported while using
- * uprof_report_print()
- *
- * The string values that you return in your callback may be wrapped across
- * multiple lines and uprof should still tabulate the report correctly. The
- * values should be freeable with g_free().
- *
- * For example:
- * |[
- * static char *half_time_cb (UProfTimerResult *timer, void *user_data)
- * {
- *   gulong msecs = uprof_timer_result_get_total_msecs (timer);
- *   return g_strdup_printf ("%lu", msecs/2);
- * }
- *
- * *snip*
- *
- * report = uprof_report_new ();
- * report = uprof_report_new ("Simple report");
- * uprof_report_add_timers_attribute (report, "Half\ntime",
- *                                    half_time_cb, NULL);
- * uprof_report_add_context (report, context);
- * uprof_report_print (report);
- * uprof_report_unref (report);
- * ]|
- *
- * Since: 0.4
- */
-void
-uprof_report_add_timers_attribute (UProfReport *report,
-                                   const char *attribute_name,
-                                   UProfReportTimersAttributeCallback callback,
-                                   void *user_data);
-
-/**
- * uprof_report_remove_timers_attribute:
- * @report: A UProfReport
- * @id: The custom report column you want to remove
- *
- * Removes the custom timers @attribute from future reports generated with
- * uprof_context_output_report()
- */
-void
-uprof_report_remove_timers_attribute (UProfReport *report,
-                                      const char *attribute_name);
-
-void
-uprof_report_print (UProfReport *report);
-
 GList *
 uprof_context_get_root_timer_results (UProfContext *context);
 
 gint
-_uprof_timer_compare_total_times (UProfTimerState *a,
-                                  UProfTimerState *b,
+_uprof_timer_compare_total_times (struct _UProfTimerState *a,
+                                  struct _UProfTimerState *b,
                                   gpointer data);
 gint
-_uprof_timer_compare_start_count (UProfTimerState *a,
-                                  UProfTimerState *b,
+_uprof_timer_compare_start_count (struct _UProfTimerState *a,
+                                  struct _UProfTimerState *b,
                                   gpointer data);
 #define UPROF_TIMER_SORT_TIME_INC \
   ((GCompareDataFunc)_uprof_timer_compare_total_times)
@@ -897,8 +831,8 @@ _uprof_timer_compare_start_count (UProfTimerState *a,
   ((GCompareDataFunc)_uprof_timer_compare_start_count)
 
 gint
-_uprof_counter_compare_count (UProfCounterState *a,
-                              UProfCounterState *b,
+_uprof_counter_compare_count (struct _UProfCounterState *a,
+                              struct _UProfCounterState *b,
                               gpointer data);
 #define UPROF_COUNTER_SORT_COUNT_INC \
   ((GCompareDataFunc)_uprof_counter_compare_count)
@@ -928,6 +862,9 @@ uprof_context_get_counter_result (UProfContext *context, const char *name);
 
 UProfTimerResult *
 uprof_context_get_timer_result (UProfContext *context, const char *name);
+
+const char *
+uprof_timer_result_get_name (UProfTimerResult *timer);
 
 const char *
 uprof_timer_result_get_description (UProfTimerResult *timer);
@@ -962,9 +899,9 @@ uprof_counter_result_get_context (UProfCounterResult *counter);
 void
 uprof_print_percentage_bar (float percent);
 
-typedef char * (*UProfTimerResultPrintCallback) (UProfTimerState *timer,
-                                                 guint           *fields_width,
-                                                 gpointer         data);
+typedef char * (*UProfTimerResultPrintCallback) (UProfTimerResult *timer,
+                                                 guint            *fields_width,
+                                                 gpointer          data);
 
 void
 uprof_timer_result_print_and_children (UProfTimerResult              *timer,
@@ -980,6 +917,9 @@ uprof_timer_result_print_and_children (UProfTimerResult              *timer,
  */
 GList *
 uprof_context_get_messages (UProfContext *context);
+
+char **
+uprof_dbus_list_reports (void);
 
 /* XXX: We might want the ability to declare "alias" timers so that we
  * can track multiple (filename, line, function) constants for essentially
