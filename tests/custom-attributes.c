@@ -64,21 +64,36 @@ UPROF_STATIC_TIMER (loop1_sub_timer,
 );
 
 static char *
-seconds_column_cb (UProfTimerResult *timer, void *user_data)
+thingies_cb (UProfReport *report,
+             const char *statistic_name,
+             const char *attribute_name,
+             void *user_data)
+{
+  return g_strdup_printf ("%f", 0.5);
+}
+
+static char *
+seconds_column_cb (UProfReport *report,
+                   UProfTimerResult *timer,
+                   void *user_data)
 {
   gulong msecs = uprof_timer_result_get_total_msecs (timer);
   return g_strdup_printf ("this took\n»»%d«« sec", (int)(msecs/1000));
 }
 
 static char *
-double_count_cb (UProfCounterResult *counter, void *user_data)
+double_count_cb (UProfReport *report,
+                 UProfCounterResult *counter,
+                 void *user_data)
 {
   int count = uprof_counter_result_get_count (counter);
   return g_strdup_printf ("doubled it's\n»»%d««", count * 2);
 }
 
 static char *
-tripple_count_cb (UProfCounterResult *counter, void *user_data)
+tripple_count_cb (UProfReport *report,
+                  UProfCounterResult *counter,
+                  void *user_data)
 {
   int count = uprof_counter_result_get_count (counter);
   return g_strdup_printf ("trippled it's\n»»%d««", count * 3);
@@ -154,11 +169,40 @@ main (int argc, char **argv)
   UPROF_TIMER_STOP (context, full_timer);
 
   report = uprof_report_new ("Simple report");
-  uprof_report_add_timers_attribute (report, "Time in\nseconds",
+  uprof_report_add_statistic (report,
+                              "Special thingie",
+                              "This is a particularly interesting thingie");
+  uprof_report_add_statistic_attribute (report,
+                                        "Special thingie",
+                                        "Thingie value",
+                                        "Thingie\nvalue",
+                                        "The real value of thingies",
+                                        UPROF_ATTRIBUTE_TYPE_FLOAT,
+                                        thingies_cb, NULL);
+  uprof_report_add_statistic_attribute (report,
+                                        "Special thingie",
+                                        "Another value",
+                                        "Another\nThingie\nvalue",
+                                        "The real value of thingies",
+                                        UPROF_ATTRIBUTE_TYPE_FLOAT,
+                                        thingies_cb, NULL);
+  uprof_report_add_timers_attribute (report,
+                                     "Time in seconds",
+                                     "Time in\nseconds",
+                                     "The time elapsed in seconds",
+                                     UPROF_ATTRIBUTE_TYPE_INT,
                                      seconds_column_cb, NULL);
-  uprof_report_add_counters_attribute (report, "Double\ncount",
+  uprof_report_add_counters_attribute (report,
+                                       "Double count",
+                                       "Double\ncount",
+                                       "The count doubled",
+                                       UPROF_ATTRIBUTE_TYPE_INT,
                                        double_count_cb, NULL);
-  uprof_report_add_counters_attribute (report, "Tripple\ncount",
+  uprof_report_add_counters_attribute (report,
+                                       "Tripple count",
+                                       "Tripple\ncount",
+                                       "The count trippled",
+                                       UPROF_ATTRIBUTE_TYPE_INT,
                                        tripple_count_cb, NULL);
   uprof_report_add_context (report, context);
   uprof_report_print (report);

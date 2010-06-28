@@ -49,7 +49,7 @@ typedef enum
 } UProfAlignment;
 #endif
 
-typedef struct _UProfPrintReportEntry
+typedef struct _UProfReportEntry
 {
   int            width;
   int            height;
@@ -59,29 +59,49 @@ typedef struct _UProfPrintReportEntry
   gboolean       is_percentage;
   float          percentage;
   char         **lines;
-} UProfPrintReportEntry;
+} UProfReportEntry;
 
-typedef struct _UProfTimerAttribute
+typedef struct _UProfAttribute
 {
   char *name;
-  UProfReportTimersAttributeCallback callback;
+  char *name_formatted;
+  char *description;
+  UProfAttributeType type;
+  void *callback;
   void *user_data;
-} UProfTimerAttribute;
+} UProfAttribute;
 
-typedef struct _UProfCounterAttribute
+typedef struct _UProfStatistic
 {
   char *name;
-  UProfReportCountersAttributeCallback callback;
-  void *user_data;
-} UProfCounterAttribute;
+  char *description;
+  GList *attributes;
+} UProfStatistic;
+
+typedef struct _UProfStatisticsGroup
+{
+  /* All the statistics in a group have the same attribute
+   * names/descriptions/types matching the template attributes. */
+  GList *template_attributes;
+
+  GList *statistics;
+
+} UProfStatisticsGroup;
 
 struct _UProfReportPrivate
 {
   char *name;
 
   GList *contexts;
+
+  /* XXX: deprecated */
   GList *context_callbacks;
 
+  UProfReportCallback init_callback;
+  UProfReportCallback fini_callback;
+  void *init_fini_user_data;
+
+  GList *statistics_groups;
   GList *timer_attributes;
   GList *counter_attributes;
 
@@ -180,6 +200,31 @@ uprof_report_get_property (GObject    *object,
 }
 
 static void
+free_attribute (UProfAttribute *attribute)
+{
+  g_free (attribute->name);
+  g_free (attribute->name_formatted);
+  g_free (attribute->description);
+  g_slice_free (UProfAttribute, attribute);
+}
+
+static void
+free_statistic (UProfStatistic *statistic)
+{
+
+  g_list_foreach (statistic->attributes, (GFunc)free_attribute, NULL);
+  g_slice_free (UProfStatistic, statistic);
+}
+
+static void
+free_statistics_group (UProfStatisticsGroup *group)
+{
+  g_list_foreach (group->template_attributes, (GFunc)free_attribute, NULL);
+  g_list_foreach (group->statistics, (GFunc)free_statistic, NULL);
+  g_slice_free (UProfStatisticsGroup, group);
+}
+
+static void
 uprof_report_finalize (GObject *object)
 {
   UProfReport *report = UPROF_REPORT (object);
@@ -190,6 +235,10 @@ uprof_report_finalize (GObject *object)
   _uprof_service_remove_report (service, report);
 
   g_free (priv->name);
+
+  g_list_foreach (priv->statistics_groups, (GFunc)free_statistics_group, NULL);
+  g_list_foreach (priv->timer_attributes, (GFunc)free_attribute, NULL);
+  g_list_foreach (priv->counter_attributes, (GFunc)free_attribute, NULL);
 
   G_OBJECT_CLASS (uprof_report_parent_class)->finalize (object);
 }
@@ -229,6 +278,7 @@ uprof_report_init (UProfReport *self)
 
   priv->context_callbacks = NULL;
 
+  priv->statistics_groups = NULL;
   priv->timer_attributes = NULL;
   priv->counter_attributes = NULL;
 
@@ -269,6 +319,7 @@ uprof_report_add_context (UProfReport *report,
   priv->contexts = g_list_prepend (priv->contexts, context);
 }
 
+/* XXX: deprecated */
 void
 uprof_report_add_context_callback (UProfReport *report,
                                    UProfReportContextCallback callback)
@@ -278,6 +329,7 @@ uprof_report_add_context_callback (UProfReport *report,
     g_list_prepend (priv->context_callbacks, callback);
 }
 
+/* XXX: deprecated */
 void
 uprof_report_remove_context_callback (UProfReport *report,
                                       UProfReportContextCallback callback)
@@ -288,75 +340,352 @@ uprof_report_remove_context_callback (UProfReport *report,
 }
 
 void
-uprof_report_add_counters_attribute (UProfReport *report,
-                                     const char *attribute_name,
-                                     UProfReportCountersAttributeCallback callback,
-                                     void *user_data)
+uprof_report_set_init_fini_callbacks (UProfReport *report,
+                                      UProfReportCallback init,
+                                      UProfReportCallback fini,
+                                      gpointer user_data)
 {
   UProfReportPrivate *priv = report->priv;
-  UProfCounterAttribute *attribute = g_slice_new (UProfCounterAttribute);
-  attribute->name = g_strdup (attribute_name);
-  attribute->callback = callback;
-  attribute->user_data = user_data;
-  priv->counter_attributes =
-    g_list_append (priv->counter_attributes, attribute);
+  priv->init_callback = init;
+  priv->fini_callback = fini;
+  priv->init_fini_user_data = user_data;
 }
 
-void
-uprof_report_remove_counters_attribute (UProfReport *report,
-                                        const char *attribute_name)
+/* If a matching statistic is found then it's removed from
+ * the list of statistic groups since it's assumed that we
+ * are about to either remove it or change an attribute. */
+static UProfStatistic *
+remove_statistic_from_group (UProfReport *report, const char *name)
 {
   UProfReportPrivate *priv = report->priv;
   GList *l;
 
-  for (l = priv->counter_attributes; l; l = l->next)
+  for (l = priv->statistics_groups; l; l = l->next)
     {
-      UProfCounterAttribute *attribute = l->data;
-      if (strcmp (attribute->name, attribute_name) == 0)
+      UProfStatisticsGroup *group = l->data;
+      GList *l2;
+
+      for (l2 = group->statistics; l2; l2 = l2->next)
         {
-          g_free (attribute->name);
-          g_slice_free (UProfCounterAttribute, attribute);
-          priv->counter_attributes =
-            g_list_delete_link (priv->counter_attributes, l);
-          return;
+          UProfStatistic *statistic = l2->data;
+          if (strcmp (statistic->name, name) == 0)
+            {
+              group->statistics = g_list_remove_link (group->statistics, l2);
+
+              /* Delete the group if we're removing the last custom
+               * statistic from it. */
+              if (!group->statistics)
+                {
+                  priv->statistics_groups =
+                    g_list_remove_link (priv->statistics_groups, l);
+                  free_statistics_group (group);
+                }
+
+              return statistic;
+            }
         }
     }
+
+  return NULL;
+}
+
+static gboolean
+statistic_attributes_equal (GList *attributes0,
+                            GList *attributes1)
+{
+  GList *l;
+
+  for (l = attributes0; l; l = l->next)
+    {
+      UProfAttribute *attribute0 = l->data;
+      GList *l2;
+
+      for (l2 = attributes1; l2; l2 = l2->next)
+        {
+          UProfAttribute *attribute1 = l->data;
+          if (strcmp (attribute0->name, attribute1->name) == 0 &&
+              strcmp (attribute0->name_formatted, attribute1->name_formatted) == 0 &&
+              strcmp (attribute0->description, attribute1->description) == 0 &&
+              attribute0->type == attribute1->type)
+            return TRUE;
+        }
+    }
+
+  return FALSE;
+}
+
+static UProfStatisticsGroup *
+find_statistics_group (UProfReport *report,
+                       UProfStatistic *statistic)
+{
+  UProfReportPrivate *priv = report->priv;
+  GList *l;
+
+  for (l = priv->statistics_groups; l; l = l->next)
+    {
+      UProfStatisticsGroup *group = l->data;
+      GList *l2;
+
+      for (l2 = group->statistics; l2; l2 = l2->next)
+        {
+          if (statistic_attributes_equal (statistic->attributes,
+                                          group->template_attributes))
+            return group;
+        }
+    }
+  return NULL;
+}
+
+static UProfStatisticsGroup *
+statistics_group_new (UProfStatistic *template_statistic)
+{
+  UProfStatisticsGroup *group = g_slice_new0 (UProfStatisticsGroup);
+  GList *l;
+
+  for (l = template_statistic->attributes; l; l = l->next)
+    {
+      UProfAttribute *template_attribute = l->data;
+
+      UProfAttribute *attribute = g_slice_new (UProfAttribute);
+      attribute->name = g_strdup (template_attribute->name);
+      attribute->name_formatted =
+        g_strdup (template_attribute->name_formatted);
+      attribute->description = g_strdup (template_attribute->description);
+      attribute->type = template_attribute->type;
+      /* nothing else needs to be initialized in a template attribute */
+
+      group->template_attributes =
+        g_list_prepend (group->template_attributes, attribute);
+    }
+
+  return group;
+}
+
+int
+compare_statistic_names_cb (gconstpointer a, gconstpointer b)
+{
+  const UProfStatistic *statistic0 = a;
+  const UProfStatistic *statistic1 = b;
+  return strcmp (statistic0->name, statistic1->name);
+}
+
+static void
+add_statistic_to_group (UProfReport *report, UProfStatistic *statistic)
+{
+  UProfStatisticsGroup *group = find_statistics_group (report, statistic);
+
+  if (!group)
+    {
+      UProfReportPrivate *priv = report->priv;
+      group = statistics_group_new (statistic);
+      priv->statistics_groups = g_list_prepend (priv->statistics_groups, group);
+    }
+
+  group->statistics = g_list_insert_sorted (group->statistics,
+                                            statistic,
+                                            compare_statistic_names_cb);
+}
+
+void
+uprof_report_add_statistic (UProfReport *report,
+                            const char *name,
+                            const char *description)
+{
+  UProfStatistic *statistic = remove_statistic_from_group (report, name);
+
+  g_return_if_fail (statistic == NULL);
+
+  statistic = g_slice_new (UProfStatistic);
+  statistic->name = g_strdup (name);
+  statistic->description = g_strdup (description);
+  statistic->attributes = NULL;
+
+  add_statistic_to_group (report, statistic);
+}
+
+void
+uprof_report_remove_statistic (UProfReport *report,
+                               const char *name)
+{
+  UProfStatistic *statistic = remove_statistic_from_group (report, name);
+
+  if (!statistic)
+    return;
+
+  free_statistic (statistic);
+}
+
+static UProfAttribute *
+find_attribute (GList *attributes, const char *name)
+{
+  GList *l;
+  for (l = attributes; l; l = l->next)
+    {
+      UProfAttribute *attribute = l->data;
+      if (strcmp (attribute->name, name) == 0)
+        return attribute;
+    }
+  return NULL;
+}
+
+static int
+compare_attribute_names_cb (gconstpointer a, gconstpointer b)
+{
+  const UProfAttribute *attribute0 = a;
+  const UProfAttribute *attribute1 = b;
+  return strcmp (attribute0->name, attribute1->name);
+}
+
+static GList *
+add_attribute (GList *attributes,
+               const char *name,
+               const char *name_formatted,
+               const char *description,
+               UProfAttributeType type,
+               void *callback,
+               void *user_data)
+{
+  UProfAttribute *attribute;
+
+  attribute = find_attribute (attributes, name);
+  if (!attribute)
+    {
+      attribute = g_slice_new (UProfAttribute);
+      attribute->name = g_strdup (name);
+    }
+  else
+    {
+      g_free (attribute->name_formatted);
+      g_free (attribute->description);
+    }
+
+  attribute->name_formatted = g_strdup (name_formatted);
+  attribute->description = g_strdup (description);
+  attribute->type = type;
+  attribute->callback = callback;
+  attribute->user_data = user_data;
+
+  return g_list_insert_sorted (attributes,
+                               attribute,
+                               compare_attribute_names_cb);
+}
+
+static GList *
+remove_attribute (GList *attributes, const char *name)
+{
+  GList *l;
+
+  for (l = attributes; l; l = l->next)
+    {
+      UProfAttribute *attribute = l->data;
+      if (strcmp (attribute->name, name) == 0)
+        {
+          g_free (attribute->name);
+          g_slice_free (UProfAttribute, attribute);
+          return g_list_delete_link (attributes, l);
+        }
+    }
+
+  return attributes;
+}
+
+void
+uprof_report_add_statistic_attribute (UProfReport *report,
+                                      const char *statistic_name,
+                                      const char *attribute_name,
+                                      const char *attribute_name_formatted,
+                                      const char *attribute_description,
+                                      UProfAttributeType attribute_type,
+                                      UProfStatisticAttributeCallback callback,
+                                      gpointer user_data)
+{
+  UProfStatistic *statistic =
+    remove_statistic_from_group (report, statistic_name);
+
+  g_return_if_fail (statistic != NULL);
+
+  statistic->attributes =
+    add_attribute (statistic->attributes,
+                   attribute_name,
+                   attribute_name_formatted,
+                   attribute_description,
+                   attribute_type,
+                   callback,
+                   user_data);
+
+  add_statistic_to_group (report, statistic);
+}
+
+void
+uprof_report_remove_statistic_attribute (UProfReport *report,
+                                         const char *statistic_name,
+                                         const char *attribute_name)
+{
+  UProfStatistic *statistic =
+    remove_statistic_from_group (report, statistic_name);
+
+  g_return_if_fail (statistic != NULL);
+
+  statistic->attributes =
+    remove_attribute (statistic->attributes, attribute_name);
+
+  add_statistic_to_group (report, statistic);
+}
+
+void
+uprof_report_add_counters_attribute (UProfReport *report,
+                                     const char *name,
+                                     const char *name_formatted,
+                                     const char *description,
+                                     UProfAttributeType type,
+                                     UProfCountersAttributeCallback callback,
+                                     void *user_data)
+{
+  UProfReportPrivate *priv = report->priv;
+  priv->counter_attributes =
+    add_attribute (priv->counter_attributes,
+                   name,
+                   name_formatted,
+                   description,
+                   type,
+                   callback,
+                   user_data);
+}
+
+void
+uprof_report_remove_counters_attribute (UProfReport *report,
+                                        const char *name)
+{
+  report->priv->counter_attributes =
+    remove_attribute (report->priv->counter_attributes, name);
 }
 
 void
 uprof_report_add_timers_attribute (UProfReport *report,
-                                   const char *attribute_name,
-                                   UProfReportTimersAttributeCallback callback,
+                                   const char *name,
+                                   const char *name_formatted,
+                                   const char *description,
+                                   UProfAttributeType type,
+                                   UProfTimersAttributeCallback callback,
                                    void *user_data)
 {
   UProfReportPrivate *priv = report->priv;
-  UProfTimerAttribute *attribute = g_slice_new (UProfTimerAttribute);
-  attribute->name = g_strdup (attribute_name);
-  attribute->callback = callback;
-  attribute->user_data = user_data;
   priv->timer_attributes =
-    g_list_append (priv->timer_attributes, attribute);
+    add_attribute (priv->timer_attributes,
+                   name,
+                   name_formatted,
+                   description,
+                   type,
+                   callback,
+                   user_data);
 }
 
 void
 uprof_report_remove_timers_attribute (UProfReport *report,
                                       const char *attribute_name)
 {
-  UProfReportPrivate *priv = report->priv;
-  GList *l;
-
-  for (l = priv->timer_attributes; l; l = l->next)
-    {
-      UProfTimerAttribute *attribute = l->data;
-      if (strcmp (attribute->name, attribute_name) == 0)
-        {
-          g_free (attribute->name);
-          g_slice_free (UProfTimerAttribute, attribute);
-          priv->timer_attributes =
-            g_list_delete_link (priv->timer_attributes, l);
-          return;
-        }
-    }
+  report->priv->timer_attributes =
+    remove_attribute (report->priv->timer_attributes, attribute_name);
 }
 
 typedef struct
@@ -374,19 +703,19 @@ add_counter_record (UProfCounterResult *counter,
   UProfReportPrivate     *priv = report->priv;
   GList                 **records = state->records;
   UProfReportRecord      *record;
-  UProfPrintReportEntry  *entry;
+  UProfReportEntry       *entry;
   char                   *lines;
   GList                  *l;
 
   record = g_slice_new0 (UProfReportRecord);
 
-  entry = g_slice_new0 (UProfPrintReportEntry);
+  entry = g_slice_new0 (UProfReportEntry);
   lines = g_strdup_printf ("%s", uprof_counter_result_get_name (counter));
   entry->lines = g_strsplit (lines, "\n", 0);
   g_free (lines);
   record->entries = g_list_prepend (record->entries, entry);
 
-  entry = g_slice_new0 (UProfPrintReportEntry);
+  entry = g_slice_new0 (UProfReportEntry);
   lines = g_strdup_printf ("%lu", uprof_counter_result_get_count (counter));
   entry->lines = g_strsplit (lines, "\n", 0);
   g_free (lines);
@@ -394,9 +723,10 @@ add_counter_record (UProfCounterResult *counter,
 
   for (l = priv->counter_attributes; l; l = l->next)
     {
-      UProfCounterAttribute *attribute = l->data;
-      entry = g_slice_new0 (UProfPrintReportEntry);
-      lines = attribute->callback (counter, attribute->user_data);
+      UProfAttribute *attribute = l->data;
+      UProfCountersAttributeCallback callback = attribute->callback;
+      entry = g_slice_new0 (UProfReportEntry);
+      lines = callback (report, counter, attribute->user_data);
       entry->lines = g_strsplit (lines, "\n", 0);
       g_free (lines);
       record->entries = g_list_prepend (record->entries, entry);
@@ -446,7 +776,7 @@ utf8_width (const char *utf8_string)
 }
 
 static void
-get_record_entries_as_text (GString *buf, UProfReportRecord *record)
+append_record_entries (GString *buf, UProfReportRecord *record)
 {
   int line;
   GList *l;
@@ -455,7 +785,7 @@ get_record_entries_as_text (GString *buf, UProfReportRecord *record)
     {
       for (l = record->entries; l; l = l->next)
         {
-          UProfPrintReportEntry *entry = l->data;
+          UProfReportEntry *entry = l->data;
           if (entry->height < (line + 1))
             g_string_append_printf (buf, "%-*s ", entry->width, "");
           else
@@ -474,14 +804,14 @@ get_record_entries_as_text (GString *buf, UProfReportRecord *record)
 }
 
 static void
-get_counter_record_as_text (GString *buf, UProfReportRecord *record)
+append_counter_record (GString *buf, UProfReportRecord *record)
 {
   UProfCounterResult *counter = record->data;
 
   if (counter && counter->count == 0)
     return;
 
-  get_record_entries_as_text (buf, record);
+  append_record_entries (buf, record);
 
   /* XXX: We currently pass a NULL timer for the first record which contains
    * the column titles... */
@@ -490,12 +820,12 @@ get_counter_record_as_text (GString *buf, UProfReportRecord *record)
 }
 
 static void
-get_counter_records_as_text (GString *buf, GList *records)
+append_counter_records (GString *buf, GList *records)
 {
   GList *l;
 
   for (l = records; l; l = l->next)
-    get_counter_record_as_text (buf, l->data);
+    append_counter_record (buf, l->data);
 }
 
 static const char *bars[] = {
@@ -538,7 +868,7 @@ prepare_report_records_for_timer_and_children (UProfReport *report,
 {
   UProfReportPrivate     *priv = report->priv;
   UProfReportRecord      *record;
-  UProfPrintReportEntry  *entry;
+  UProfReportEntry       *entry;
   int                     indent;
   char                   *lines;
   UProfTimerResult       *root;
@@ -551,7 +881,7 @@ prepare_report_records_for_timer_and_children (UProfReport *report,
   record = g_slice_new0 (UProfReportRecord);
 
   indent = indent_level * 2; /* 2 spaces per indent level */
-  entry = g_slice_new0 (UProfPrintReportEntry);
+  entry = g_slice_new0 (UProfReportEntry);
   lines = g_strdup_printf ("%*s%-*s",
                            indent, "",
                            priv->max_timer_name_size + 1 - indent,
@@ -561,7 +891,7 @@ prepare_report_records_for_timer_and_children (UProfReport *report,
   record->entries = g_list_prepend (record->entries, entry);
 
   timer_total = _uprof_timer_result_get_total (timer);
-  entry = g_slice_new0 (UProfPrintReportEntry);
+  entry = g_slice_new0 (UProfReportEntry);
   lines = g_strdup_printf ("%-.2f",
                            ((float)timer_total /
                             uprof_get_system_counter_hz()) * 1000.0);
@@ -571,9 +901,10 @@ prepare_report_records_for_timer_and_children (UProfReport *report,
 
   for (l = priv->timer_attributes; l; l = l->next)
     {
-      UProfTimerAttribute *attribute = l->data;
-      entry = g_slice_new0 (UProfPrintReportEntry);
-      lines = attribute->callback (timer, attribute->user_data);
+      UProfAttribute *attribute = l->data;
+      UProfTimersAttributeCallback callback = attribute->callback;
+      entry = g_slice_new0 (UProfReportEntry);
+      lines = callback (report, timer, attribute->user_data);
       entry->lines = g_strsplit (lines, "\n", 0);
       g_free (lines);
       record->entries = g_list_prepend (record->entries, entry);
@@ -584,7 +915,7 @@ prepare_report_records_for_timer_and_children (UProfReport *report,
   root_total = _uprof_timer_result_get_total (root);
   percent = ((float)timer_total / (float)root_total) * 100.0;
 
-  entry = g_slice_new0 (UProfPrintReportEntry);
+  entry = g_slice_new0 (UProfReportEntry);
   lines = g_strdup_printf ("%7.3f%%", percent);
   entry->lines = g_strsplit (lines, "\n", 0);
   g_free (lines);
@@ -592,7 +923,7 @@ prepare_report_records_for_timer_and_children (UProfReport *report,
   entry->percentage = percent;
   record->entries = g_list_prepend (record->entries, entry);
 
-  entry = g_slice_new0 (UProfPrintReportEntry);
+  entry = g_slice_new0 (UProfReportEntry);
   lines = get_percentage_bar (percent);
   entry->lines = g_strsplit (lines, "\n", 0);
   g_free (lines);
@@ -644,7 +975,7 @@ size_record_entries (GList *records)
 
       for (l2 = record->entries, i = 0; l2; l2 = l2->next, i++)
         {
-          UProfPrintReportEntry *entry = l2->data;
+          UProfReportEntry *entry = l2->data;
           int line;
 
           g_assert (i < entries_per_record);
@@ -668,7 +999,7 @@ size_record_entries (GList *records)
 
       for (l2 = record->entries, i = 0; l2; l2 = l2->next, i++)
         {
-          UProfPrintReportEntry *entry = l2->data;
+          UProfReportEntry *entry = l2->data;
           entry->width = column_width[i];
         }
     }
@@ -677,14 +1008,14 @@ size_record_entries (GList *records)
 }
 
 static void
-get_timer_record_as_text (GString *buf, UProfReportRecord *record)
+append_timer_record (GString *buf, UProfReportRecord *record)
 {
   UProfTimerResult  *timer = record->data;
 
   if (timer && timer->count == 0)
     return;
 
-  get_record_entries_as_text (buf, record);
+  append_record_entries (buf, record);
 
   /* XXX: We currently pass a NULL timer for the first record which contains
    * the column titles... */
@@ -693,12 +1024,12 @@ get_timer_record_as_text (GString *buf, UProfReportRecord *record)
 }
 
 static void
-get_timer_records_as_text (GString *buf, GList *records)
+append_timer_records (GString *buf, GList *records)
 {
   GList *l;
 
   for (l = records; l; l = l->next)
-    get_timer_record_as_text (buf, l->data);
+    append_timer_record (buf, l->data);
 }
 
 static void
@@ -711,124 +1042,13 @@ free_report_records (GList *records)
       UProfReportRecord *record = l->data;
       for (l2 = record->entries; l2; l2 = l2->next)
         {
-          UProfPrintReportEntry *entry = l2->data;
+          UProfReportEntry *entry = l2->data;
           g_strfreev (entry->lines);
-          g_slice_free (UProfPrintReportEntry, entry);
+          g_slice_free (UProfReportEntry, entry);
         }
       g_slice_free (UProfReportRecord, l->data);
     }
   g_list_free (records);
-}
-
-static void
-get_context_report_as_text (GString *buf,
-                            UProfReport *report,
-                            UProfContext *context)
-{
-  UProfReportPrivate *priv = report->priv;
-  GList *records = NULL;
-  UProfReportRecord *record;
-  UProfPrintReportEntry *entry;
-  GList *root_timers;
-  GList *l;
-
-  g_string_append_printf (buf,
-                          "context: %s\n"
-                          "\n"
-                          "counters:\n",
-                          uprof_context_get_name (context));
-
-  record = g_slice_new0 (UProfReportRecord);
-
-  entry = g_slice_new0 (UProfPrintReportEntry);
-  entry->lines = g_strsplit ("Name", "\n", 0);
-  record->entries = g_list_prepend (record->entries, entry);
-
-  entry = g_slice_new0 (UProfPrintReportEntry);
-  entry->lines = g_strsplit ("Total", "\n", 0);
-  record->entries = g_list_prepend (record->entries, entry);
-
-  for (l = priv->counter_attributes; l; l = l->next)
-    {
-      UProfCounterAttribute *attribute = l->data;
-
-      entry = g_slice_new0 (UProfPrintReportEntry);
-      entry->lines = g_strsplit (attribute->name, "\n", 0);
-      record->entries = g_list_prepend (record->entries, entry);
-    }
-
-  record->entries = g_list_reverse (record->entries);
-  record->data = NULL;
-
-  records = g_list_prepend (records, record);
-
-  prepare_report_records_for_counters (report, context, &records);
-
-  records = g_list_reverse (records);
-
-  size_record_entries (records);
-
-  get_counter_records_as_text (buf, records);
-
-  free_report_records (records);
-
-  g_string_append_printf (buf, "\n");
-  g_string_append_printf (buf, "timers:\n");
-  g_assert (context->resolved);
-
-  root_timers = uprof_context_get_root_timer_results (context);
-  for (l = root_timers; l != NULL; l = l->next)
-    {
-      UProfTimerResult *timer = l->data;
-      GList *l2;
-
-      records = NULL;
-
-      record = g_slice_new0 (UProfReportRecord);
-
-      entry = g_slice_new0 (UProfPrintReportEntry);
-      entry->lines = g_strsplit ("Name", "\n", 0);
-      record->entries = g_list_prepend (record->entries, entry);
-
-      entry = g_slice_new0 (UProfPrintReportEntry);
-      entry->lines = g_strsplit ("Total\nmsecs", "\n", 0);
-      record->entries = g_list_prepend (record->entries, entry);
-
-      for (l2 = priv->timer_attributes; l2; l2 = l2->next)
-        {
-          UProfTimerAttribute *attribute = l2->data;
-
-          entry = g_slice_new0 (UProfPrintReportEntry);
-          entry->lines = g_strsplit (attribute->name, "\n", 0);
-          record->entries = g_list_prepend (record->entries, entry);
-        }
-
-      entry = g_slice_new0 (UProfPrintReportEntry);
-      entry->lines = g_strsplit ("Percent", "\n", 0);
-      record->entries = g_list_prepend (record->entries, entry);
-
-      /* We need a dummy entry for the last percentage bar column because
-       * every record is expected to have the same number of entries. */
-      entry = g_slice_new0 (UProfPrintReportEntry);
-      entry->lines = g_strsplit ("", "\n", 0);
-      record->entries = g_list_prepend (record->entries, entry);
-
-      record->entries = g_list_reverse (record->entries);
-      record->data = NULL;
-
-      records = g_list_prepend (records, record);
-
-      prepare_report_records_for_timer_and_children (report, timer,
-                                                     0, &records);
-
-      records = g_list_reverse (records);
-
-      size_record_entries (records);
-
-      get_timer_records_as_text (buf, records);
-      free_report_records (records);
-    }
-  g_list_free (root_timers);
 }
 
 typedef struct
@@ -1007,7 +1227,129 @@ uprof_context_resolve_timer_heirachy (UProfContext *context)
 }
 
 static void
-report_context (GString *buf, UProfReport *report, UProfContext *context)
+append_counter_statistics (GString *buf,
+                           UProfReport *report,
+                           UProfContext *context)
+{
+  UProfReportPrivate *priv = report->priv;
+  GList *records = NULL;
+  UProfReportRecord *record;
+  UProfReportEntry *entry;
+  GList *l;
+
+  g_string_append_printf (buf, "counters:\n");
+
+  record = g_slice_new0 (UProfReportRecord);
+
+  entry = g_slice_new0 (UProfReportEntry);
+  entry->lines = g_strsplit ("Name", "\n", 0);
+  record->entries = g_list_prepend (record->entries, entry);
+
+  entry = g_slice_new0 (UProfReportEntry);
+  entry->lines = g_strsplit ("Total", "\n", 0);
+  record->entries = g_list_prepend (record->entries, entry);
+
+  for (l = priv->counter_attributes; l; l = l->next)
+    {
+      UProfAttribute *attribute = l->data;
+
+      entry = g_slice_new0 (UProfReportEntry);
+      entry->lines = g_strsplit (attribute->name, "\n", 0);
+      record->entries = g_list_prepend (record->entries, entry);
+    }
+
+  record->entries = g_list_reverse (record->entries);
+  record->data = NULL;
+
+  records = g_list_prepend (records, record);
+
+  prepare_report_records_for_counters (report, context, &records);
+
+  records = g_list_reverse (records);
+
+  size_record_entries (records);
+
+  append_counter_records (buf, records);
+
+  free_report_records (records);
+}
+
+static void
+append_timer_statistics (GString *buf,
+                         UProfReport *report,
+                         UProfContext *context)
+{
+  UProfReportPrivate *priv = report->priv;
+  GList *records = NULL;
+  UProfReportRecord *record;
+  UProfReportEntry *entry;
+  GList *root_timers;
+  GList *l;
+
+  g_string_append_printf (buf, "\n");
+  g_string_append_printf (buf, "timers:\n");
+  g_assert (context->resolved);
+
+  root_timers = uprof_context_get_root_timer_results (context);
+  for (l = root_timers; l != NULL; l = l->next)
+    {
+      UProfTimerResult *timer = l->data;
+      GList *l2;
+
+      records = NULL;
+
+      record = g_slice_new0 (UProfReportRecord);
+
+      entry = g_slice_new0 (UProfReportEntry);
+      entry->lines = g_strsplit ("Name", "\n", 0);
+      record->entries = g_list_prepend (record->entries, entry);
+
+      entry = g_slice_new0 (UProfReportEntry);
+      entry->lines = g_strsplit ("Total\nmsecs", "\n", 0);
+      record->entries = g_list_prepend (record->entries, entry);
+
+      for (l2 = priv->timer_attributes; l2; l2 = l2->next)
+        {
+          UProfAttribute *attribute = l2->data;
+
+          entry = g_slice_new0 (UProfReportEntry);
+          entry->lines = g_strsplit (attribute->name, "\n", 0);
+          record->entries = g_list_prepend (record->entries, entry);
+        }
+
+      entry = g_slice_new0 (UProfReportEntry);
+      entry->lines = g_strsplit ("Percent", "\n", 0);
+      record->entries = g_list_prepend (record->entries, entry);
+
+      /* We need a dummy entry for the last percentage bar column because
+       * every record is expected to have the same number of entries. */
+      entry = g_slice_new0 (UProfReportEntry);
+      entry->lines = g_strsplit ("", "\n", 0);
+      record->entries = g_list_prepend (record->entries, entry);
+
+      record->entries = g_list_reverse (record->entries);
+      record->data = NULL;
+
+      records = g_list_prepend (records, record);
+
+      prepare_report_records_for_timer_and_children (report, timer,
+                                                     0, &records);
+
+      records = g_list_reverse (records);
+
+      size_record_entries (records);
+
+      append_timer_records (buf, records);
+      free_report_records (records);
+    }
+
+  g_list_free (root_timers);
+}
+
+static void
+append_context_report (GString *buf,
+                       UProfReport *report,
+                       UProfContext *context)
 {
   UProfReportPrivate *priv = report->priv;
   GList *l;
@@ -1027,17 +1369,161 @@ report_context (GString *buf, UProfReport *report, UProfContext *context)
       return;
     }
 
-  get_context_report_as_text (buf, report, context);
+  g_string_append_printf (buf,
+                          "context: %s\n\n",
+                          uprof_context_get_name (context));
+
+  append_counter_statistics (buf, report, context);
+
+  append_timer_statistics (buf, report, context);
 }
 
 static void
-generate_uprof_report (GString *buf, UProfReport *report)
+add_statistic_record (UProfReport *report,
+                      UProfStatistic *statistic,
+                      GList **records)
+{
+  UProfReportRecord  *record;
+  UProfReportEntry   *entry;
+  char               *lines;
+  GList              *l;
+
+  record = g_slice_new0 (UProfReportRecord);
+
+  entry = g_slice_new0 (UProfReportEntry);
+  lines = g_strdup_printf ("%s", statistic->name);
+  entry->lines = g_strsplit (lines, "\n", 0);
+  g_free (lines);
+  record->entries = g_list_prepend (record->entries, entry);
+
+  for (l = statistic->attributes; l; l = l->next)
+    {
+      UProfAttribute *attribute = l->data;
+      UProfStatisticAttributeCallback callback = attribute->callback;
+      entry = g_slice_new0 (UProfReportEntry);
+      lines = callback (report,
+                        statistic->name,
+                        attribute->name,
+                        attribute->user_data);
+      entry->lines = g_strsplit (lines, "\n", 0);
+      g_free (lines);
+      record->entries = g_list_prepend (record->entries, entry);
+    }
+
+  record->entries = g_list_reverse (record->entries);
+  record->data = statistic;
+
+  *records = g_list_prepend (*records, record);
+}
+
+static void
+prepare_report_records_for_statistics_group (UProfReport *report,
+                                             UProfStatisticsGroup *group,
+                                             GList **records)
+{
+  GList *l;
+
+  for (l = group->statistics; l; l = l->next)
+    add_statistic_record (report, l->data, records);
+}
+
+static void
+append_statistic_record (GString *buf, UProfReportRecord *record)
+{
+  append_record_entries (buf, record);
+
+  /* XXX: We currently pass NULL data for the first record which contains
+   * the column titles... */
+  if (record->data == NULL)
+    g_string_append_printf (buf, "\n");
+}
+
+static void
+append_statistic_records (GString *buf, GList *records)
+{
+  GList *l;
+
+  for (l = records; l; l = l->next)
+    append_statistic_record (buf, l->data);
+}
+
+static void
+append_statistics_group (GString *buf,
+                         UProfReport *report,
+                         UProfStatisticsGroup *group)
+{
+  GList *records = NULL;
+  UProfReportRecord *record;
+  UProfReportEntry *entry;
+  GList *l;
+
+  record = g_slice_new0 (UProfReportRecord);
+
+  entry = g_slice_new0 (UProfReportEntry);
+  entry->lines = g_strsplit ("Name", "\n", 0);
+  record->entries = g_list_prepend (record->entries, entry);
+
+  /* All statistics in a group have the same attributes */
+  for (l = group->template_attributes; l; l = l->next)
+    {
+      UProfAttribute *attribute = l->data;
+
+      entry = g_slice_new0 (UProfReportEntry);
+      entry->lines = g_strsplit (attribute->name_formatted, "\n", 0);
+      record->entries = g_list_prepend (record->entries, entry);
+    }
+
+  record->entries = g_list_reverse (record->entries);
+  record->data = NULL;
+
+  records = g_list_prepend (records, record);
+
+  prepare_report_records_for_statistics_group (report, group, &records);
+
+  records = g_list_reverse (records);
+
+  size_record_entries (records);
+
+  append_statistic_records (buf, records);
+
+  free_report_records (records);
+
+}
+
+static void
+append_statistics (GString *buf, UProfReport *report)
 {
   UProfReportPrivate *priv = report->priv;
   GList *l;
 
+  if (!priv->statistics_groups)
+    return;
+
+  g_string_append_printf (buf, "custom report statistics:\n");
+
+  for (l = priv->statistics_groups; l; l = l->next)
+    {
+      UProfStatisticsGroup *group = l->data;
+
+      append_statistics_group (buf, report, group);
+    }
+
+  g_string_append_printf (buf, "\n");
+}
+
+static char *
+generate_uprof_report (UProfReport *report)
+{
+  GString *buf = g_string_new ("");
+  UProfReportPrivate *priv = report->priv;
+  GList *l;
+
+  append_statistics (buf, report);
+
   for (l = priv->contexts; l; l = l->next)
-    report_context (buf, report, l->data);
+    append_context_report (buf, report, l->data);
+
+  return g_string_free (buf, FALSE);
 }
 
 gboolean
@@ -1045,23 +1531,16 @@ _uprof_report_get_text_report (UProfReport *report,
                                char **text_ret,
                                GError **error)
 {
-  GString *buf = g_string_new ("");
-
-  generate_uprof_report (buf, report);
-  *text_ret = buf->str;
-  g_string_free (buf, FALSE);
-
+  *text_ret = generate_uprof_report (report);
   return TRUE;
 }
 
 void
 uprof_report_print (UProfReport *report)
 {
-  GString *buf = g_string_new ("");
-
-  generate_uprof_report (buf, report);
-  printf ("%s", buf->str);
-  g_string_free (buf, TRUE);
+  char *output = generate_uprof_report (report);
+  printf ("%s", output);
+  g_free (output);
 }
 
 void
