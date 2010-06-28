@@ -355,12 +355,11 @@ uprof_report_set_init_fini_callbacks (UProfReport *report,
  * the list of statistic groups since it's assumed that we
  * are about to either remove it or change an attribute. */
 static UProfStatistic *
-remove_statistic_from_group (UProfReport *report, const char *name)
+groups_list_remove_statistic (GList **groups, const char *name)
 {
-  UProfReportPrivate *priv = report->priv;
   GList *l;
 
-  for (l = priv->statistics_groups; l; l = l->next)
+  for (l = *groups; l; l = l->next)
     {
       UProfStatisticsGroup *group = l->data;
       GList *l2;
@@ -376,8 +375,7 @@ remove_statistic_from_group (UProfReport *report, const char *name)
                * statistic from it. */
               if (!group->statistics)
                 {
-                  priv->statistics_groups =
-                    g_list_remove_link (priv->statistics_groups, l);
+                  *groups = g_list_remove_link (*groups, l);
                   free_statistics_group (group);
                 }
 
@@ -415,13 +413,12 @@ statistic_attributes_equal (GList *attributes0,
 }
 
 static UProfStatisticsGroup *
-find_statistics_group (UProfReport *report,
+find_statistics_group (GList *groups,
                        UProfStatistic *statistic)
 {
-  UProfReportPrivate *priv = report->priv;
   GList *l;
 
-  for (l = priv->statistics_groups; l; l = l->next)
+  for (l = groups; l; l = l->next)
     {
       UProfStatisticsGroup *group = l->data;
       GList *l2;
@@ -469,21 +466,39 @@ compare_statistic_names_cb (gconstpointer a, gconstpointer b)
   return strcmp (statistic0->name, statistic1->name);
 }
 
-static void
-add_statistic_to_group (UProfReport *report, UProfStatistic *statistic)
+static GList *
+groups_list_add_statistic (GList *groups, UProfStatistic *statistic)
 {
-  UProfStatisticsGroup *group = find_statistics_group (report, statistic);
+  UProfStatisticsGroup *group = find_statistics_group (groups, statistic);
 
   if (!group)
     {
-      UProfReportPrivate *priv = report->priv;
       group = statistics_group_new (statistic);
-      priv->statistics_groups = g_list_prepend (priv->statistics_groups, group);
+      groups = g_list_prepend (groups, group);
     }
 
   group->statistics = g_list_insert_sorted (group->statistics,
                                             statistic,
                                             compare_statistic_names_cb);
+
+  return groups;
+}
+
+static GList *
+groups_list_add (GList *groups,
+                 const char *name,
+                 const char *description)
+{
+  UProfStatistic *statistic = groups_list_remove_statistic (&groups, name);
+
+  g_return_val_if_fail (statistic == NULL, groups);
+
+  statistic = g_slice_new (UProfStatistic);
+  statistic->name = g_strdup (name);
+  statistic->description = g_strdup (description);
+  statistic->attributes = NULL;
+
+  return groups_list_add_statistic (groups, statistic);
 }
 
 void
@@ -491,28 +506,30 @@ uprof_report_add_statistic (UProfReport *report,
                             const char *name,
                             const char *description)
 {
-  UProfStatistic *statistic = remove_statistic_from_group (report, name);
+  report->priv->statistics_groups =
+    groups_list_add (report->priv->statistics_groups,
+                     name, description);
+}
 
-  g_return_if_fail (statistic == NULL);
+static GList *
+groups_list_delete_statistic (GList *groups, const char *name)
+{
+  UProfStatistic *statistic = groups_list_remove_statistic (&groups, name);
 
-  statistic = g_slice_new (UProfStatistic);
-  statistic->name = g_strdup (name);
-  statistic->description = g_strdup (description);
-  statistic->attributes = NULL;
+  if (!statistic)
+    return groups;
 
-  add_statistic_to_group (report, statistic);
+  free_statistic (statistic);
+
+  return groups;
 }
 
 void
 uprof_report_remove_statistic (UProfReport *report,
                                const char *name)
 {
-  UProfStatistic *statistic = remove_statistic_from_group (report, name);
-
-  if (!statistic)
-    return;
-
-  free_statistic (statistic);
+  report->priv->statistics_groups =
+    groups_list_delete_statistic (report->priv->statistics_groups, name);
 }
 
 static UProfAttribute *
@@ -589,20 +606,20 @@ remove_attribute (GList *attributes, const char *name)
   return attributes;
 }
 
-void
-uprof_report_add_statistic_attribute (UProfReport *report,
-                                      const char *statistic_name,
-                                      const char *attribute_name,
-                                      const char *attribute_name_formatted,
-                                      const char *attribute_description,
-                                      UProfAttributeType attribute_type,
-                                      UProfStatisticAttributeCallback callback,
-                                      gpointer user_data)
+static GList *
+groups_list_add_statistic_attribute (GList *groups,
+                                     const char *statistic_name,
+                                     const char *attribute_name,
+                                     const char *attribute_name_formatted,
+                                     const char *attribute_description,
+                                     UProfAttributeType attribute_type,
+                                     UProfStatisticAttributeCallback callback,
+                                     gpointer user_data)
 {
   UProfStatistic *statistic =
-    remove_statistic_from_group (report, statistic_name);
+    groups_list_remove_statistic (&groups, statistic_name);
 
-  g_return_if_fail (statistic != NULL);
+  g_return_val_if_fail (statistic != NULL, groups);
 
   statistic->attributes =
     add_attribute (statistic->attributes,
@@ -613,7 +630,44 @@ uprof_report_add_statistic_attribute (UProfReport *report,
                    callback,
                    user_data);
 
-  add_statistic_to_group (report, statistic);
+  return groups_list_add_statistic (groups, statistic);
+}
+
+void
+uprof_report_add_statistic_attribute (UProfReport *report,
+                                      const char *statistic_name,
+                                      const char *attribute_name,
+                                      const char *attribute_name_formatted,
+                                      const char *attribute_description,
+                                      UProfAttributeType attribute_type,
+                                      UProfStatisticAttributeCallback callback,
+                                      gpointer user_data)
+{
+  report->priv->statistics_groups =
+    groups_list_add_statistic_attribute (report->priv->statistics_groups,
+                                         statistic_name,
+                                         attribute_name,
+                                         attribute_name_formatted,
+                                         attribute_description,
+                                         attribute_type,
+                                         callback,
+                                         user_data);
+}
+
+static GList *
+groups_list_remove_statistic_attribute (GList *groups,
+                                        const char *statistic_name,
+                                        const char *attribute_name)
+{
+  UProfStatistic *statistic =
+    groups_list_remove_statistic (&groups, statistic_name);
+
+  g_return_val_if_fail (statistic != NULL, groups);
+
+  statistic->attributes =
+    remove_attribute (statistic->attributes, attribute_name);
+
+  return groups_list_add_statistic (groups, statistic);
 }
 
 void
@@ -621,15 +675,10 @@ uprof_report_remove_statistic_attribute (UProfReport *report,
                                          const char *statistic_name,
                                          const char *attribute_name)
 {
-  UProfStatistic *statistic =
-    remove_statistic_from_group (report, statistic_name);
-
-  g_return_if_fail (statistic != NULL);
-
-  statistic->attributes =
-    remove_attribute (statistic->attributes, attribute_name);
-
-  add_statistic_to_group (report, statistic);
+  report->priv->statistics_groups =
+    groups_list_remove_statistic_attribute (report->priv->statistics_groups,
+                                            statistic_name,
+                                            attribute_name);
 }
 
 void
@@ -1347,38 +1396,6 @@ append_timer_statistics (GString *buf,
 }
 
 static void
-append_context_report (GString *buf,
-                       UProfReport *report,
-                       UProfContext *context)
-{
-  UProfReportPrivate *priv = report->priv;
-  GList *l;
-
-  uprof_context_resolve_timer_heirachy (context);
-
-  /* XXX: callbacks should be considered deprecated since they disable
-   * the normal report generation and don't support appending to a
-   * GString. */
-  if (priv->context_callbacks)
-    {
-      for (l = priv->context_callbacks; l != NULL; l = l->next)
-        {
-          UProfReportContextCallback callback = l->data;
-          callback (report, context);
-        }
-      return;
-    }
-
-  g_string_append_printf (buf,
-                          "context: %s\n\n",
-                          uprof_context_get_name (context));
-
-  append_counter_statistics (buf, report, context);
-
-  append_timer_statistics (buf, report, context);
-}
-
-static void
 add_statistic_record (UProfReport *report,
                       UProfStatistic *statistic,
                       GList **records)
@@ -1487,11 +1504,67 @@ append_statistics_group (GString *buf,
   append_statistic_records (buf, records);
 
   free_report_records (records);
-
 }
 
 static void
-append_statistics (GString *buf, UProfReport *report)
+append_context_statistics (GString *buf,
+                           UProfReport *report,
+                           UProfContext *context)
+{
+  GList *l;
+
+  if (!context->statistics_groups)
+    return;
+
+  g_string_append_printf (buf, "custom context statistics:\n");
+
+  for (l = context->statistics_groups; l; l = l->next)
+    {
+      UProfStatisticsGroup *group = l->data;
+
+      append_statistics_group (buf, report, group);
+    }
+
+  g_string_append_printf (buf, "\n");
+}
+
+static void
+append_context_report (GString *buf,
+                       UProfReport *report,
+                       UProfContext *context)
+{
+  UProfReportPrivate *priv = report->priv;
+  GList *l;
+
+  uprof_context_resolve_timer_heirachy (context);
+
+  /* XXX: callbacks should be considered deprecated since they disable
+   * the normal report generation and don't support appending to a
+   * GString. */
+  if (priv->context_callbacks)
+    {
+      for (l = priv->context_callbacks; l != NULL; l = l->next)
+        {
+          UProfReportContextCallback callback = l->data;
+          callback (report, context);
+        }
+      return;
+    }
+
+  g_string_append_printf (buf,
+                          "context: %s\n\n",
+                          uprof_context_get_name (context));
+
+
+  append_context_statistics (buf, report, context);
+
+  append_counter_statistics (buf, report, context);
+
+  append_timer_statistics (buf, report, context);
+}
+
+static void
+append_report_statistics (GString *buf, UProfReport *report)
 {
   UProfReportPrivate *priv = report->priv;
   GList *l;
@@ -1518,7 +1591,7 @@ generate_uprof_report (UProfReport *report)
   UProfReportPrivate *priv = report->priv;
   GList *l;
 
-  append_statistics (buf, report);
+  append_report_statistics (buf, report);
 
   for (l = priv->contexts; l; l = l->next)
     append_context_report (buf, report, l->data);

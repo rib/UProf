@@ -34,6 +34,8 @@ struct _UProfContext
 
   GList *links;
 
+  GList *statistics_groups;
+
   GList	*counters;
   GList	*timers;
 
