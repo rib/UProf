@@ -24,3 +24,14 @@ tags
 TAGS
 uprof-*.pc
 xmldocs.make
+tests/custom-attributes
+tests/dbus-service
+tests/dlopen
+tests/linking
+tests/module.so
+tests/recursion
+tests/sanity_check
+tests/suspend
+tests/suspend2
+tests/suspend3
+uprof/uprof-tool
