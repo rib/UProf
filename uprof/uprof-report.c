@@ -547,6 +547,7 @@ add_attribute (GList *attributes,
                void *user_data)
 {
   UProfAttribute *attribute;
+  gboolean found = FALSE;
 
   attribute = find_attribute (attributes, name);
   if (!attribute)
@@ -558,6 +559,7 @@ add_attribute (GList *attributes,
     {
       g_free (attribute->name_formatted);
       g_free (attribute->description);
+      found = TRUE;
     }
 
   attribute->name_formatted = g_strdup (name_formatted);
@@ -566,9 +568,12 @@ add_attribute (GList *attributes,
   attribute->callback = callback;
   attribute->user_data = user_data;
 
-  return g_list_insert_sorted (attributes,
-                               attribute,
-                               compare_attribute_names_cb);
+  if (!found)
+    return g_list_insert_sorted (attributes,
+                                 attribute,
+                                 compare_attribute_names_cb);
+  else
+    return attributes;
 }
 
 static GList *
