@@ -64,10 +64,19 @@ UPROF_STATIC_TIMER (loop1_sub_timer,
 );
 
 static char *
-thingies_cb (UProfReport *report,
+thingys_cb (UProfReport *report,
              const char *statistic_name,
              const char *attribute_name,
              void *user_data)
+{
+  return g_strdup_printf ("%f", 0.5);
+}
+
+static char *
+dobbles_cb (UProfReport *report,
+            const char *statistic_name,
+            const char *attribute_name,
+            void *user_data)
 {
   return g_strdup_printf ("%f", 0.5);
 }
@@ -170,22 +179,33 @@ main (int argc, char **argv)
 
   report = uprof_report_new ("Simple report");
   uprof_report_add_statistic (report,
-                              "Special thingie",
-                              "This is a particularly interesting thingie");
+                              "Special thingy",
+                              "This is a particularly interesting thingy");
   uprof_report_add_statistic_attribute (report,
-                                        "Special thingie",
-                                        "Thingie value",
-                                        "Thingie\nvalue",
-                                        "The real value of thingies",
+                                        "Special thingy",
+                                        "Thingy value",
+                                        "Thingy\nvalue",
+                                        "The real value of thingys",
                                         UPROF_ATTRIBUTE_TYPE_FLOAT,
-                                        thingies_cb, NULL);
+                                        thingys_cb, NULL);
   uprof_report_add_statistic_attribute (report,
-                                        "Special thingie",
+                                        "Special thingy",
                                         "Another value",
-                                        "Another\nThingie\nvalue",
-                                        "The real value of thingies",
+                                        "Another\nThingy\nvalue",
+                                        "The real value of thingys",
                                         UPROF_ATTRIBUTE_TYPE_FLOAT,
-                                        thingies_cb, NULL);
+                                        thingys_cb, NULL);
+  uprof_report_add_statistic (report,
+                              "Special dobble",
+                              "This is a particularly interesting dobble");
+  uprof_report_add_statistic_attribute (report,
+                                        "Special dobble",
+                                        "Dobble value",
+                                        "Dobble\nvalue",
+                                        "The real value of dobbles",
+                                        UPROF_ATTRIBUTE_TYPE_FLOAT,
+                                        dobbles_cb, NULL);
+
   uprof_report_add_timers_attribute (report,
                                      "Time in seconds",
                                      "Time in\nseconds",

@@ -379,7 +379,7 @@ statistic_attributes_equal (GList *attributes0,
 
       for (l2 = attributes1; l2; l2 = l2->next)
         {
-          UProfAttribute *attribute1 = l->data;
+          UProfAttribute *attribute1 = l2->data;
           if (strcmp (attribute0->name, attribute1->name) == 0 &&
               strcmp (attribute0->name_formatted, attribute1->name_formatted) == 0 &&
               strcmp (attribute0->description, attribute1->description) == 0 &&
