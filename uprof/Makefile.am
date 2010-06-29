@@ -1,10 +1,30 @@
 
 lib_LTLIBRARIES = libuprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@.la
 
-public_h_source = uprof.h uprof-report.h uprof-dbus.h
+public_h_source = \
+	uprof.h \
+	uprof-context.h \
+	uprof-counter.h \
+	uprof-counter-result.h \
+	uprof-timer.h \
+	uprof-timer-result.h \
+	uprof-report.h \
+	uprof-dbus.h
+
 libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_SOURCES = \
 	uprof-private.h \
 	uprof.c \
+	uprof-context-private.h \
+	uprof-context.c \
+	uprof-object-state-private.h \
+	uprof-object-state.h \
+	uprof-object-state.c \
+	uprof-counter.c \
+	uprof-counter-result-private.h \
+	uprof-counter-result.c \
+	uprof-timer.c \
+	uprof-timer-result-private.h \
+	uprof-timer-result.c \
 	uprof-service-private.h \
 	uprof-service.c \
 	uprof-report-private.h \

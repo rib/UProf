@@ -1,6 +1,6 @@
 /* This file is part of UProf.
  *
- * Copyright © 2008, 2009, 2010 Robert Bragg
+ * Copyright © 2010 Robert Bragg
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,19 +18,11 @@
  * MA  02110-1301  USA
  */
 
-#ifndef _UPROF_PRIVATE_H_
-#define _UPROF_PRIVATE_H_
+#ifndef _UPROF_TIMER_RESULT_PRIVATE_H_
+#define _UPROF_TIMER_RESULT_PRIVATE_H_
 
-#include "uprof-service-private.h"
-#include <glib.h>
+guint64
+_uprof_timer_result_get_total (UProfTimerResult *timer_state);
 
-G_BEGIN_DECLS
+#endif /* _UPROF_TIMER_RESULT_PRIVATE_H_ */
 
-extern GList *_uprof_all_contexts;
-
-UProfService *
-_uprof_get_service (void);
-
-G_END_DECLS
-
-#endif /* _UPROF_PRIVATE_H_ */

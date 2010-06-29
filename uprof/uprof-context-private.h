@@ -18,19 +18,39 @@
  * MA  02110-1301  USA
  */
 
-#ifndef _UPROF_PRIVATE_H_
-#define _UPROF_PRIVATE_H_
+#ifndef _UPROF_CONTEXT_PRIVATE_H_
+#define _UPROF_CONTEXT_PRIVATE_H_
 
-#include "uprof-service-private.h"
 #include <glib.h>
 
-G_BEGIN_DECLS
+struct _UProfContext
+{
+  guint  ref;
 
-extern GList *_uprof_all_contexts;
+  char	*name;
 
-UProfService *
-_uprof_get_service (void);
+  GList *links;
 
-G_END_DECLS
+  GList *statistics_groups;
 
-#endif /* _UPROF_PRIVATE_H_ */
+  GList	*counters;
+  GList	*timers;
+
+  int disabled;
+
+  gboolean resolved;
+  GList *root_timers;
+
+  GList *report_messages;
+};
+
+typedef void (*UProfContextCallback) (UProfContext *context,
+                                      gpointer user_data);
+
+void
+_uprof_context_for_self_and_links_recursive (UProfContext *context,
+                                             UProfContextCallback callback,
+                                             gpointer user_data);
+
+#endif /* _UPROF_CONTEXT_PRIVATE_H_ */
+

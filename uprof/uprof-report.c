@@ -1,6 +1,7 @@
 /* This file is part of UProf.
  *
- * Copyright © 2010 Robert Bragg
+ * Copyright © 2006 OpenedHand
+ * Copyright © 2008, 2009, 2010 Robert Bragg
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -20,6 +21,9 @@
 
 #include "uprof.h"
 #include "uprof-private.h"
+#include "uprof-timer-result.h"
+#include "uprof-timer-result-private.h"
+#include "uprof-context-private.h"
 #include "uprof-service-private.h"
 #include "uprof-report.h"
 #include "uprof-report-private.h"
@@ -1131,7 +1135,7 @@ find_timer_children_of_parent_cb (UProfContext *context,
       UProfTimerState *timer = l->data;
       g_print ("%*smatch: timer=\"%s\" context=\"%s\"\n",
                state->indent, "",
-               timer->object.name, context->name);
+               timer->object.name, uprof_context_get_name (context));
     }
   state->indent += 2;
 #endif
@@ -1147,7 +1151,7 @@ find_timer_children (UProfContext *context, UProfTimerState *parent)
 #ifdef DEBUG_TIMER_HEIRARACHY
   GList *l2;
   g_print (" find_timer_children (context = %s, parent = %s):\n",
-           context->name, parent->object.name);
+           uprof_context_get_name (context), parent->object.name);
 
   state.indent = 0;
 #endif
@@ -1178,7 +1182,7 @@ resolve_timer_heirachy (UProfContext    *context,
 
 #ifdef DEBUG_TIMER_HEIRACHY
   g_print ("resolve_timer_heirachy (context = %s, timer = %s, parent = %s)\n",
-           context->name,
+           uprof_context_get_name (context),
            ((UProfObjectState *)timer)->name,
            parent ? ((UProfObjectState *)parent)->name : "NULL");
 #endif
@@ -1217,7 +1221,7 @@ debug_print_timer_recursive (UProfTimerResult *timer, int indent)
   g_print ("%*scontext = %s, timer = %s, parent_name = %s, "
            "parent = %s\n",
            2 * indent, "",
-           context->name,
+           uprof_context_get_name (context),
            timer->object.name,
            timer->parent_name,
            timer->parent ? timer->parent->object.name : "NULL");

@@ -18,25 +18,32 @@
  * MA  02110-1301  USA
  */
 
-#ifndef _UPROF_DBUS_H_
-#define _UPROF_DBUS_H_
+#ifndef _UPROF_OBJECT_STATE_PRIVATE_H_
+#define _UPROF_OBJECT_STATE_PRIVATE_H_
 
-#include <glib.h>
+#define UPROF_OBJECT_STATE(X) ((UProfObjectState *)(X))
 
-G_BEGIN_DECLS
+typedef struct _UProfObjectLocation
+{
+  char  *filename;
+  long   line;
+  char  *function;
+} UProfObjectLocation;
 
-char **
-uprof_dbus_list_reports (void);
+void
+_uprof_object_state_init (UProfObjectState *object,
+                          UProfContext *context,
+                          const char *name,
+                          const char *description);
 
-#if 0
-UProfDBusReportProxy *
-uprof_dbus_get_report_proxy (char *report_location);
-#endif
+void
+_uprof_object_state_dispose (UProfObjectState *object);
 
-char *
-uprof_dbus_get_text_report (const char *bus_name, const char *report_name);
+void
+_uprof_object_state_add_location (UProfObjectState *object,
+                                  const char       *filename,
+                                  unsigned long     line,
+                                  const char       *function);
 
-G_END_DECLS
-
-#endif /* _UPROF_DBUS_H_ */
+#endif /* _UPROF_OBJECT_STATE_PRIVATE_H_ */
 

@@ -18,19 +18,31 @@
  * MA  02110-1301  USA
  */
 
-#ifndef _UPROF_PRIVATE_H_
-#define _UPROF_PRIVATE_H_
+#ifndef _UPROF_COUNTER_RESULT_H_
+#define _UPROF_COUNTER_RESULT_H_
 
-#include "uprof-service-private.h"
+#include <uprof-counter.h>
+
 #include <glib.h>
 
 G_BEGIN_DECLS
 
-extern GList *_uprof_all_contexts;
+#ifndef UPROF_CONTEXT_TYPEDEF
+typedef struct _UProfContext UProfContext;
+#define UPROF_CONTEXT_TYPEDEF
+#endif
 
-UProfService *
-_uprof_get_service (void);
+typedef struct _UProfCounterState UProfCounterResult;
+
+const char *
+uprof_counter_result_get_name (UProfCounterResult *counter);
+
+gulong
+uprof_counter_result_get_count (UProfCounterResult *counter);
+
+UProfContext *
+uprof_counter_result_get_context (UProfCounterResult *counter);
 
 G_END_DECLS
 
-#endif /* _UPROF_PRIVATE_H_ */
+#endif /* _UPROF_COUNTER_RESULT_H_ */

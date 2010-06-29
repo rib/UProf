@@ -1,6 +1,6 @@
 /* This file is part of UProf.
  *
- * Copyright © 2008, 2009, 2010 Robert Bragg
+ * Copyright © 2010 Robert Bragg
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,19 +18,40 @@
  * MA  02110-1301  USA
  */
 
-#ifndef _UPROF_PRIVATE_H_
-#define _UPROF_PRIVATE_H_
+#ifndef _UPROF_OBJECT_STATE_H_
+#define _UPROF_OBJECT_STATE_H_
 
-#include "uprof-service-private.h"
 #include <glib.h>
 
 G_BEGIN_DECLS
 
-extern GList *_uprof_all_contexts;
+#ifndef UPROF_CONTEXT_TYPEDEF
+typedef struct _UProfContext UProfContext;
+#define UPROF_CONTEXT_TYPEDEF
+#endif
 
-UProfService *
-_uprof_get_service (void);
+typedef struct _UProfObjectState
+{
+  /*< private >*/
+  UProfContext *context;
+
+  char  *name;
+  char  *description;
+  GList *locations;
+
+  unsigned long padding0;
+  unsigned long padding1;
+  unsigned long padding2;
+  unsigned long padding3;
+  unsigned long padding4;
+  unsigned long padding5;
+  unsigned long padding6;
+  unsigned long padding7;
+  unsigned long padding8;
+  unsigned long padding9;
+
+} UProfObjectState;
 
 G_END_DECLS
 
-#endif /* _UPROF_PRIVATE_H_ */
+#endif /* _UPROF_OBJECT_STATE_H_ */

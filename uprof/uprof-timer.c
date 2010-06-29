@@ -1,6 +1,6 @@
 /* This file is part of UProf.
  *
- * Copyright © 2008, 2009, 2010 Robert Bragg
+ * Copyright © 2010 Robert Bragg
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,19 +18,33 @@
  * MA  02110-1301  USA
  */
 
-#ifndef _UPROF_PRIVATE_H_
-#define _UPROF_PRIVATE_H_
+#include "uprof-timer.h"
 
-#include "uprof-service-private.h"
 #include <glib.h>
 
-G_BEGIN_DECLS
+gint
+_uprof_timer_compare_total_times (UProfTimerState *a,
+                                  UProfTimerState *b,
+                                  gpointer data)
+{
+  if (a->total > b->total)
+    return -1;
+  else if (a->total < b->total)
+    return 1;
+  else
+    return 0;
+}
 
-extern GList *_uprof_all_contexts;
+gint
+_uprof_timer_compare_start_count (UProfTimerState *a,
+                                  UProfTimerState *b,
+                                  gpointer data)
+{
+  if (a->count > b->count)
+    return -1;
+  else if (a->count < b->count)
+    return 1;
+  else
+    return 0;
+}
 
-UProfService *
-_uprof_get_service (void);
-
-G_END_DECLS
-
-#endif /* _UPROF_PRIVATE_H_ */

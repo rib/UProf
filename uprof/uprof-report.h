@@ -21,8 +21,11 @@
 #ifndef _UPROF_REPORT_H_
 #define _UPROF_REPORT_H_
 
-#include <glib.h>
+#include <uprof-counter-result.h>
+#include <uprof-timer-result.h>
+
 #include <glib-object.h>
+#include <glib.h>
 
 G_BEGIN_DECLS
 
@@ -295,15 +298,6 @@ void
 uprof_report_remove_statistic_attribute (UProfReport *report,
                                          const char *statistic_name,
                                          const char *attribute_name);
-
-#ifndef UPROT_COUNTER_RESULT_TYPEDEF
-typedef struct _UProfCounterState UProfCounterResult;
-#define UPROT_COUNTER_RESULT_TYPEDEF
-#endif
-#ifndef UPROT_TIMER_RESULT_TYPEDEF
-typedef struct _UProfTimerState   UProfTimerResult;
-#define UPROT_TIMER_RESULT_TYPEDEF
-#endif
 
 /**
  * UProfCountersAttributeCallback:
