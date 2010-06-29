@@ -12,6 +12,8 @@ config.h.in
 config.h.in~
 config.log
 config.status
+config.guess
+config.sub
 configure
 gtk-doc.make
 INSTALL
@@ -24,6 +26,11 @@ tags
 TAGS
 uprof-*.pc
 xmldocs.make
+compile
+cscope.in.out
+cscope.out
+cscope.po.out
+depcomp
 tests/custom-attributes
 tests/dbus-service
 tests/dlopen
