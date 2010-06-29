@@ -470,7 +470,12 @@ groups_list_add (GList *groups,
 {
   UProfStatistic *statistic = groups_list_remove_statistic (&groups, name);
 
-  g_return_val_if_fail (statistic == NULL, groups);
+  if (statistic)
+    {
+      g_free (statistic->description);
+      statistic->description = g_strdup (description);
+      return groups_list_add_statistic (groups, statistic);
+    }
 
   statistic = g_slice_new (UProfStatistic);
   statistic->name = g_strdup (name);
