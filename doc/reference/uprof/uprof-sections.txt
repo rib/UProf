@@ -1,22 +1,49 @@
 <SECTION>
 <FILE>uprof</FILE>
-UProfContext
 uprof_init
 uprof_get_option_group
 uprof_get_system_counter
 uprof_get_system_counter_hz
+uprof_find_context
+uprof_get_mainloop_context
+</SECTION>
+
+<SECTION>
+<FILE>uprof-context</FILE>
+UProfContext
 uprof_context_new
 uprof_context_ref
 uprof_context_unref
 uprof_context_get_name
+uprof_context_add_counter
+uprof_context_add_timer
+uprof_context_add_report_message
+uprof_context_link
+uprof_context_unlink
+uprof_context_suspend
+uprof_context_resume
+UProfCounterResultCallback
+uprof_context_foreach_counter
+uprof_context_get_counter_result
+UProfTimerResultCallback
+uprof_context_foreach_timer
+uprof_context_get_timer_result
+UProfMessageCallback
+uprof_context_foreach_message
+</SECTION>
 
+<SECTION>
+<FILE>uprof-counter</FILE>
 UPROF_STATIC_COUNTER
 UPROF_COUNTER
 UPROF_COUNTER_INC
 UPROF_COUNTER_DEC
 UPROF_COUNTER_ZERO
 uprof_context_add_counter
+</SECTION>
 
+<SECTION>
+<FILE>uprof-timer</FILE>
 UPROF_STATIC_TIMER
 UPROF_TIMER
 UPROF_TIMER_START
@@ -24,14 +51,10 @@ UPROF_TIMER_STOP
 UPROF_RECURSIVE_TIMER_START
 UPROF_RECURSIVE_TIMER_STOP
 uprof_context_add_timer
+</SECTION>
 
-uprof_context_add_report_message
-
-uprof_context_link
-uprof_context_unlink
-uprof_context_suspend
-uprof_context_resume
-
+<SECTION>
+<FILE>uprof-report</FILE>
 uprof_report_new
 uprof_report_ref
 uprof_report_unref
@@ -47,11 +70,17 @@ UProfTimersAttributeCallback
 uprof_report_add_timers_attribute
 uprof_report_remove_timers_attribute
 uprof_report_print
+</SECTION>
 
+<SECTION>
+<FILE>uprof-dbus</FILE>
+uprof_dbus_list_reports
+uprof_dbus_get_text_report
 </SECTION>
 
 <SECTION>
 <FILE>uprof-private</FILE>
+UProfCounterState
 UProfTimerState
 </SECTION>
 

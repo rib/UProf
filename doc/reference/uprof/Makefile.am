@@ -45,11 +45,11 @@ FIXXREF_OPTIONS=\
 # e.g. HFILE_GLOB=$(top_srcdir)/gtk/*.h
 # e.g. CFILE_GLOB=$(top_srcdir)/gtk/*.c
 HFILE_GLOB=$(top_srcdir)/uprof/*.h
-CFILE_GLOB=$(top_srcdir)/uprof/*.c
+CFILE_GLOB=
 
 # Header files to ignore when scanning.
 # e.g. IGNORE_HFILES=gtkdebug.h gtkintl.h
-IGNORE_HFILES=
+IGNORE_HFILES=$(top_srcdir)/uprof/uprof-*-private.h
 
 EXTRA_HFILES=
 

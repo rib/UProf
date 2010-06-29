@@ -24,5 +24,8 @@
 guint64
 _uprof_timer_result_get_total (UProfTimerResult *timer_state);
 
+GList *
+_uprof_timer_result_get_children (UProfTimerResult *timer);
+
 #endif /* _UPROF_TIMER_RESULT_PRIVATE_H_ */
 

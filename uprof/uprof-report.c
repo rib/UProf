@@ -98,9 +98,6 @@ struct _UProfReportPrivate
 
   GList *contexts;
 
-  /* XXX: deprecated */
-  GList *context_callbacks;
-
   UProfReportCallback init_callback;
   UProfReportCallback fini_callback;
   void *init_fini_user_data;
@@ -280,8 +277,6 @@ uprof_report_init (UProfReport *self)
 
   priv->contexts = NULL;
 
-  priv->context_callbacks = NULL;
-
   priv->statistics_groups = NULL;
   priv->timer_attributes = NULL;
   priv->counter_attributes = NULL;
@@ -321,26 +316,6 @@ uprof_report_add_context (UProfReport *report,
 {
   UProfReportPrivate *priv = report->priv;
   priv->contexts = g_list_prepend (priv->contexts, context);
-}
-
-/* XXX: deprecated */
-void
-uprof_report_add_context_callback (UProfReport *report,
-                                   UProfReportContextCallback callback)
-{
-  UProfReportPrivate *priv = report->priv;
-  priv->context_callbacks =
-    g_list_prepend (priv->context_callbacks, callback);
-}
-
-/* XXX: deprecated */
-void
-uprof_report_remove_context_callback (UProfReport *report,
-                                      UProfReportContextCallback callback)
-{
-  UProfReportPrivate *priv = report->priv;
-  priv->context_callbacks =
-    g_list_remove (priv->context_callbacks, callback);
 }
 
 void
@@ -987,7 +962,7 @@ prepare_report_records_for_timer_and_children (UProfReport *report,
 
   *records = g_list_prepend (*records, record);
 
-  children = uprof_timer_result_get_children (timer);
+  children = _uprof_timer_result_get_children (timer);
   children = g_list_sort_with_data (children,
                                     UPROF_TIMER_SORT_TIME_INC,
                                     NULL);
@@ -1537,28 +1512,11 @@ append_context_report (GString *buf,
                        UProfReport *report,
                        UProfContext *context)
 {
-  UProfReportPrivate *priv = report->priv;
-  GList *l;
-
   uprof_context_resolve_timer_heirachy (context);
-
-  /* XXX: callbacks should be considered deprecated since they disable
-   * the normal report generation and don't support appending to a
-   * GString. */
-  if (priv->context_callbacks)
-    {
-      for (l = priv->context_callbacks; l != NULL; l = l->next)
-        {
-          UProfReportContextCallback callback = l->data;
-          callback (report, context);
-        }
-      return;
-    }
 
   g_string_append_printf (buf,
                           "context: %s\n\n",
                           uprof_context_get_name (context));
-
 
   append_context_statistics (buf, report, context);
 
@@ -1619,138 +1577,4 @@ uprof_report_print (UProfReport *report)
   printf ("%s", output);
   g_free (output);
 }
-
-void
-uprof_print_percentage_bar (float percent)
-{
-  char *percentage_bar = get_percentage_bar (percent);
-
-  g_print ("%s", percentage_bar);
-  g_free (percentage_bar);
-}
-
-/* XXX: Only used to support deprecated API */
-static void
-print_timer_and_children (UProfReport                   *report,
-                          UProfTimerResult              *timer,
-                          UProfTimerResultPrintCallback  callback,
-                          int                            indent_level,
-                          gpointer                       data)
-{
-  UProfReportPrivate *priv = report->priv;
-  char               *extra_fields;
-  guint               extra_fields_width = 0;
-  UProfTimerResult   *root;
-  GList              *children;
-  GList              *l;
-  float               percent;
-  int                 indent;
-  guint64             timer_total;
-  guint64             root_total;
-
-  if (callback)
-    {
-      extra_fields = callback (timer, &extra_fields_width, data);
-      if (!extra_fields)
-        return;
-    }
-  else
-    extra_fields = g_strdup ("");
-
-  /* percentages are reported relative to the root timer */
-  root = uprof_timer_result_get_root (timer);
-
-  indent = indent_level * 2; /* 2 spaces per indent level */
-
-  timer_total = _uprof_timer_result_get_total (timer);
-  root_total = _uprof_timer_result_get_total (root);
-
-  percent = ((float)timer_total / (float)root_total) * 100.0;
-  g_print (" %*s%-*s%-10.2f  %*s %7.3f%% ",
-           indent,
-           "",
-           priv->max_timer_name_size + 1 - indent,
-           timer->object.name,
-           ((float)timer_total / uprof_get_system_counter_hz()) * 1000.0,
-           extra_fields_width,
-           extra_fields,
-           percent);
-
-  uprof_print_percentage_bar (percent);
-  g_print ("\n");
-
-  children = uprof_timer_result_get_children (timer);
-  children = g_list_sort_with_data (children,
-                                    UPROF_TIMER_SORT_TIME_INC,
-                                    NULL);
-  for (l = children; l != NULL; l = l->next)
-    {
-      UProfTimerState *child = l->data;
-      if (child->count == 0)
-        continue;
-
-      print_timer_and_children (report,
-                                child,
-                                callback,
-                                indent_level + 1,
-                                data);
-    }
-  g_list_free (children);
-
-  g_free (extra_fields);
-}
-
-static int
-get_name_size_for_timer_and_children (UProfTimerResult *timer,
-                                      int indent_level)
-{
-  int max_name_size =
-    (indent_level * 2) + utf8_width (uprof_timer_result_get_name (timer));
-  GList *l;
-
-  for (l = timer->children; l; l = l->next)
-    {
-      UProfTimerResult *child = l->data;
-      int child_name_size =
-        get_name_size_for_timer_and_children (child, indent_level + 1);
-      if (child_name_size > max_name_size)
-        max_name_size = child_name_size;
-    }
-
-  return max_name_size;
-}
-
-/* XXX: Deprecated API */
-void
-uprof_timer_result_print_and_children (UProfTimerResult              *timer,
-                                       UProfTimerResultPrintCallback  callback,
-                                       gpointer                       data)
-{
-  char *extra_titles = NULL;
-  guint extra_titles_width = 0;
-  UProfReport *report;
-
-  if (callback)
-    extra_titles = callback (NULL, &extra_titles_width, data);
-  if (!extra_titles)
-    extra_titles = g_strdup ("");
-
-  report = g_new0 (UProfReport, 1);
-  report->priv->max_timer_name_size =
-    get_name_size_for_timer_and_children (timer, 0);
-
-  g_print (" %-*s%s %*s %s\n",
-           report->priv->max_timer_name_size + 1,
-           "Name",
-           "Total msecs",
-           extra_titles_width,
-           extra_titles,
-           "Percent");
-
-  g_free (extra_titles);
-
-  print_timer_and_children (report, timer, callback, 0, data);
-  g_free (report);
-}
-
 

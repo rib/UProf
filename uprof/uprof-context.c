@@ -478,12 +478,13 @@ uprof_context_add_report_message (UProfContext *context,
                                              report_message);
 }
 
-GList *
-uprof_context_get_messages (UProfContext *context)
+void
+uprof_context_foreach_message (UProfContext *context,
+                               UProfMessageCallback callback,
+                               gpointer user_data)
 {
-  GList *l = g_list_copy (context->report_messages);
-  for (; l != NULL; l = l->next)
-    l->data = g_strdup (l->data);
-  return l;
+  GList *l;
+  for (l = context->report_messages; l; l = l->next)
+    callback (l->data, user_data);
 }
 

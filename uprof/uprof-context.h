@@ -30,6 +30,65 @@
 
 G_BEGIN_DECLS
 
+/**
+ * SECTION:uprof-context
+ * @short_description: Group counters and timers by application/library domains
+ *
+ * All statistics tracked by UProf are associated with a named context
+ * which usually corresponds to a single application or library.
+ *
+ * Contexts can be linked together at runtime if you want to report
+ * relationships between the statistics between different libraries
+ * and applications and because this is linking mechanism is done at
+ * runtime it avoids the awkwardness of having to export special
+ * profiling symbols from your libraries.
+ *
+ * A typical application would declare a single uprof context symbol
+ * that is visible accross the whole application. So in a header you
+ * could have:
+ *
+ * |[
+ * UProfContext *_my_uprof_context;
+ * ]|
+ *
+ * And then after initializing uprof via uprof_init() you could do:
+ * |[
+ * _my_uprof_context = uprof_context ("My Application");
+ * ]|
+ *
+ * If you have a library that is mainloop based and you allow your
+ * library to be a slave of an external mainloop then you should also
+ * link your context to the shared mainloop. For example the Clutter
+ * library can either create and manage its own mainloop or it can be
+ * integrated with a mainloop created by an application. Linking to
+ * the shared mainloop context can be done like this:
+ * |[
+ * _my_uprof_context = uprof_context ("My Application");
+ * uprof_context_link (_my_uprof_context, uprof_get_mainloop_context ());
+ * ]|
+ *
+ * At this point you can then start to declare counters and timers
+ * somthing like:
+ *
+ * |[
+ * UPROF_STATIC_COUNTER (loop_counter,
+ *                       "Loop counter",
+ *                       "A Counter for a loop",
+ *                       0 //no application private data);
+ * UPROF_COUNTER_INC (_my_uprof_context, loop_counter);
+ * ]|
+ *
+ * See UPROF_STATIC_COUNTER() and UPROF_STATIC_TIMER() for more
+ * details.
+ */
+
+/**
+ * UProfContext:
+ *
+ * An opaque, ref counted type used to track a group of statistics
+ * under a given name. A new context is created via
+ * uprof_context_new() and freed using uprof_context_unref().
+ */
 #ifndef UPROF_CONTEXT_TYPEDEF
 typedef struct _UProfContext UProfContext;
 #define UPROF_CONTEXT_TYPEDEF
@@ -191,17 +250,6 @@ uprof_context_link (UProfContext *context, UProfContext *other);
 void
 uprof_context_unlink (UProfContext *context, UProfContext *other);
 
-/* XXX: deprecated */
-/**
- * uprof_context_output_report:
- * @context: A UProfContext
- *
- * Generates a report of the accumulated timer and counter data associated with
- * the given context.
- */
-void
-uprof_context_output_report (UProfContext *context);
-
 /**
  * uprof_context_add_report_message:
  * @context: A UProfContext
@@ -269,16 +317,34 @@ uprof_context_get_counter_result (UProfContext *context, const char *name);
 UProfTimerResult *
 uprof_context_get_timer_result (UProfContext *context, const char *name);
 
-/* XXX: deprecated */
 /**
- * uprof_context_get_messages:
- * @context: A UProfContext
+ * UProfMessageCallback:
+ * @message: The message currently being iterated.
+ * @user_data: The private data set with
+ *             uprof_context_foreach_message().
  *
- * Returns: a list of messages previously logged using
- * uprof_context_add_report_message()
+ * A callback prototype used with uprof_context_foreach_message() to
+ * iterate all the messages associated with a #UProfContext.
+ *
+ * Since: 0.4
  */
-GList *
-uprof_context_get_messages (UProfContext *context);
+typedef void (*UProfMessageCallback) (const char *message, gpointer user_data);
+
+/**
+ * uprof_context_foreach_message:
+ * @context: A #UProfContext
+ * @callback: A #UProfMessageCallback to call for each message
+ * @user_data: Private data to pass to the callback.
+ *
+ * Iterates all the messages associated with the given @context and
+ * calls the @callback for each one.
+ *
+ * Since: 0.4
+ */
+void
+uprof_context_foreach_message (UProfContext *context,
+                               UProfMessageCallback callback,
+                               gpointer user_data);
 
 G_END_DECLS
 

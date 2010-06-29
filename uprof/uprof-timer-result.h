@@ -52,9 +52,35 @@ uprof_timer_result_get_parent (UProfTimerResult *timer);
 UProfTimerResult *
 uprof_timer_result_get_root (UProfTimerResult *timer);
 
-/* XXX: deprecated */
-GList *
-uprof_timer_result_get_children (UProfTimerResult *timer);
+/**
+ * UProfTimerResultChildCallback:
+ * @child: The current child being iterated.
+ * @user_data: The private data passed to
+ *             uprof_timer_result_foreach_child().
+ *
+ * A callback prototype used with uprof_timer_result_foreach_child()
+ * to iterate all the children of a #UProfTimerResult.
+ *
+ * Since: 0.4
+ */
+typedef void (*UProfTimerResultChildCallback) (UProfTimerResult *child,
+                                               gpointer user_data);
+
+/**
+ * uprof_timer_result_foreach_child:
+ * @timer: A #UProfTimerResult whos children you want to iterate.
+ * @callback: A #UProfTimerResultChildCallback called for each child
+ * @user_data: Private data to pass to the callback.
+ *
+ * Iterates all the children of the given @timer and calls @callback
+ * for each one.
+ *
+ * Since: 0.4
+ */
+void
+uprof_timer_result_foreach_child (UProfTimerResult *timer,
+                                  UProfTimerResultChildCallback callback,
+                                  gpointer user_data);
 
 UProfContext *
 uprof_timer_result_get_context (UProfTimerResult *timer);
@@ -62,12 +88,6 @@ uprof_timer_result_get_context (UProfTimerResult *timer);
 typedef char * (*UProfTimerResultPrintCallback) (UProfTimerResult *timer,
                                                  guint            *fields_width,
                                                  gpointer          data);
-
-/* XXX: deprecated */
-void
-uprof_timer_result_print_and_children (UProfTimerResult              *timer,
-                                       UProfTimerResultPrintCallback  callback,
-                                       gpointer                       data);
 
 G_END_DECLS
 

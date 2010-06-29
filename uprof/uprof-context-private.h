@@ -25,6 +25,8 @@
 
 struct _UProfContext
 {
+  /*< private >*/
+
   guint  ref;
 
   char	*name;

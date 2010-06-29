@@ -52,13 +52,16 @@
       OProfile or Sysprof UProf can be used to provide application specific
       reports making statistics more accesible, and encouraging ongoing
       tracking of key statistics. Also unlike sysprof the current timing
-      features are non-stochastic and measure real world elapsed time (via the
-      rdtsc instruction for x86 CPUs) This gives us a very high precision
-      counter and measuring real world time has proven to be good way of
-      highlighiting non-CPU bound bottlenecks.</para>
+      features are non-stochastic and measure real world elapsed time
+      which can often help highlight non-CPU bound bottlenecks.</para>
 
     </section>
 
     <xi:include href="xml/uprof.xml"/>
+    <xi:include href="xml/uprof-context.xml"/>
+    <xi:include href="xml/uprof-counter.xml"/>
+    <xi:include href="xml/uprof-timer.xml"/>
+    <xi:include href="xml/uprof-report.xml"/>
+    <xi:include href="xml/uprof-dbus.xml"/>
   </chapter>
 </book>

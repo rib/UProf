@@ -374,7 +374,7 @@ uprof_report_add_counters_attribute (UProfReport *report,
  * @id: The custom report column you want to remove
  *
  * Removes the custom counters @attribute from future reports generated
- * with uprof_context_output_report()
+ * with uprof_report_print().
  */
 void
 uprof_report_remove_counters_attribute (UProfReport *report,
@@ -451,7 +451,7 @@ uprof_report_add_timers_attribute (UProfReport *report,
  * @id: The custom report column you want to remove
  *
  * Removes the custom timers @attribute from future reports generated with
- * uprof_context_output_report()
+ * uprof_report_print().
  */
 void
 uprof_report_remove_timers_attribute (UProfReport *report,

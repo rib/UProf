@@ -82,8 +82,18 @@ uprof_timer_result_get_root (UProfTimerResult *timer)
   return timer;
 }
 
+void
+uprof_timer_result_foreach_child (UProfTimerResult *timer,
+                                  UProfTimerResultChildCallback callback,
+                                  gpointer user_data)
+{
+  GList *l;
+  for (l = timer->children; l; l = l->next)
+    callback (l->data, user_data);
+}
+
 GList *
-uprof_timer_result_get_children (UProfTimerResult *timer)
+_uprof_timer_result_get_children (UProfTimerResult *timer)
 {
   return g_list_copy (timer->children);
 }

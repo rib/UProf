@@ -35,16 +35,61 @@
 
 G_BEGIN_DECLS
 
-#if 0
-#ifndef UPROT_COUNTER_RESULT_TYPEDEF
-typedef struct _UProfCounterState UProfCounterResult;
-#define UPROT_COUNTER_RESULT_TYPEDEF
-#endif
-#ifndef UPROT_TIMER_RESULT_TYPEDEF
-typedef struct _UProfTimerState   UProfTimerResult;
-#define UPROT_TIMER_RESULT_TYPEDEF
-#endif
-#endif
+/**
+ * SECTION:uprof
+ * @short_description: Fuctions to initialize uprof + query the system counter
+ *
+ * UProf is a toolkit for profiling applications and libraries with an
+ * emphasis on domain specific instrumentation. Unlike tools such as
+ * OProfile or Sysprof UProf can be used to provide application
+ * specific reports making statistics more accesible, and encouraging
+ * ongoing tracking of key statistics. Also unlike sysprof the current
+ * timing features are non-stochastic and measure real world elapsed
+ * time which can be a particularly helpful way of highlighiting
+ * non-CPU bound bottlenecks.
+ *
+ * To give a taster of how you can add UProf instrumentation to your
+ * application here is a simple example:
+ *
+ * |[
+ * #include <uprof.h>
+ * #include <unistd.h>
+ *
+ * UPROF_STATIC_TIMER (timer,
+ *                     NULL, /<!-- -->* parent *<!-- -->/
+ *                     "Example timer",
+ *                     "An example timer around a sleep(1)",
+ *                     0); /<!-- -->* private data *<!-- -->/
+ *
+ * /<!-- -->* Each application/library typically has one context symbol
+ *    visible across the whole application. *<!-- -->/
+ * UProfContext *_my_context;
+ *
+ * int
+ * main (int argc, char **argv)
+ * {
+ *   UProfReport *report;
+ *
+ *   uprof_init (&argc, &argv);
+ *
+ *   _my_context = uprof_context_new ("My Context");
+ *
+ *   UPROF_TIMER_START (_my_context, timer);
+ *   sleep (1);
+ *   UPROF_TIMER_STOP (_my_context, timer);
+ *
+ *   report = uprof_report_new ("Example report");
+ *   uprof_report_add_context (report, _my_context);
+ *   uprof_report_print (report);
+ *   uprof_report_unref (report);
+ *
+ *   uprof_context_unref (_my_context);
+ * }
+ * ]|
+ *
+ * So once you have initialized uprof (normally using uprof_init())
+ * you should take a look at uprof_context_new().
+ */
 
 /**
  * uprof_init:
@@ -181,10 +226,6 @@ uprof_find_context (const char *name);
  */
 UProfContext *
 uprof_get_mainloop_context (void);
-
-/* XXX: deprecated */
-void
-uprof_print_percentage_bar (float percent);
 
 G_END_DECLS
 
