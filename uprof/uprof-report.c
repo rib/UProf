@@ -1050,7 +1050,7 @@ append_timer_record (GString *buf, UProfReportRecord *record)
 {
   UProfTimerResult  *timer = record->data;
 
-  if (timer && timer->count == 0)
+  if (timer && _uprof_timer_result_get_total (timer) == 0)
     return;
 
   append_record_entries (buf, record);
