@@ -114,17 +114,38 @@ uprof_report_add_context (UProfReport *report,
                           UProfContext *context);
 
 /**
- * UProfReportCallback:
+ * UProfReportInitCallback:
  * @report: A #UProfReport object
+ * @closure: A place to store state that will be passed from an init
+ *           callback to a fini calback.
  * @user_data: Private user data previously associated with the callback
  *
  * A callback prototype used by uprof_report_set_init_fini_callbacks()
- * which allow you to hook into report generation.
+ * which allow you to hook into the start of report generation.
+ *
+ * Returns: %FALSE if the report generation should be aborted else
+ * %TRUE
  *
  * Since: 0.4
  */
-typedef void (*UProfReportCallback) (UProfReport *report,
-                                     gpointer user_data);
+typedef gboolean (*UProfReportInitCallback) (UProfReport *report,
+                                             gpointer *closure,
+                                             gpointer user_data);
+
+/**
+ * UProfReportFiniCallback:
+ * @report: A #UProfReport object
+ * @closure: The state optionally set in an init callback.
+ * @user_data: Private user data previously associated with the callback
+ *
+ * A callback prototype used by uprof_report_set_init_fini_callbacks()
+ * which allow you to hook into the end of report generation.
+ *
+ * Since: 0.4
+ */
+typedef void (*UProfReportFiniCallback) (UProfReport *report,
+                                         gpointer closure,
+                                         gpointer user_data);
 
 /**
  * uprof_report_set_init_fini_callbacks:
@@ -145,8 +166,8 @@ typedef void (*UProfReportCallback) (UProfReport *report,
  */
 void
 uprof_report_set_init_fini_callbacks (UProfReport *report,
-                                      UProfReportCallback init,
-                                      UProfReportCallback fini,
+                                      UProfReportInitCallback init,
+                                      UProfReportFiniCallback fini,
                                       gpointer user_data);
 
 typedef void (*UProfReportContextCallback) (UProfReport *report,

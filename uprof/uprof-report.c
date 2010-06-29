@@ -98,8 +98,8 @@ struct _UProfReportPrivate
 
   GList *contexts;
 
-  UProfReportCallback init_callback;
-  UProfReportCallback fini_callback;
+  UProfReportInitCallback init_callback;
+  UProfReportFiniCallback fini_callback;
   void *init_fini_user_data;
 
   GList *statistics_groups;
@@ -320,8 +320,8 @@ uprof_report_add_context (UProfReport *report,
 
 void
 uprof_report_set_init_fini_callbacks (UProfReport *report,
-                                      UProfReportCallback init,
-                                      UProfReportCallback fini,
+                                      UProfReportInitCallback init,
+                                      UProfReportFiniCallback fini,
                                       gpointer user_data)
 {
   UProfReportPrivate *priv = report->priv;
@@ -1512,8 +1512,6 @@ append_context_report (GString *buf,
                        UProfReport *report,
                        UProfContext *context)
 {
-  uprof_context_resolve_timer_heirachy (context);
-
   g_string_append_printf (buf,
                           "context: %s\n\n",
                           uprof_context_get_name (context));
@@ -1552,11 +1550,26 @@ generate_uprof_report (UProfReport *report)
   GString *buf = g_string_new ("");
   UProfReportPrivate *priv = report->priv;
   GList *l;
+  void *closure;
+
+  for (l = priv->contexts; l; l = l->next)
+    uprof_context_resolve_timer_heirachy (l->data);
+
+  if (priv->init_callback &&
+      !priv->init_callback (report,
+                            &closure,
+                            priv->init_fini_user_data))
+    return NULL;
 
   append_report_statistics (buf, report);
 
   for (l = priv->contexts; l; l = l->next)
     append_context_report (buf, report, l->data);
+
+  if (priv->fini_callback)
+    priv->fini_callback (report,
+                         closure,
+                         priv->init_fini_user_data);
 
   return g_string_free (buf, FALSE);
 }

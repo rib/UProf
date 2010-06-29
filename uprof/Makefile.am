@@ -4,6 +4,7 @@ lib_LTLIBRARIES = libuprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@.la
 public_h_source = \
 	uprof.h \
 	uprof-context.h \
+	uprof-object-state.h \
 	uprof-counter.h \
 	uprof-counter-result.h \
 	uprof-timer.h \
@@ -17,7 +18,6 @@ libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_SOURCES = \
 	uprof-context-private.h \
 	uprof-context.c \
 	uprof-object-state-private.h \
-	uprof-object-state.h \
 	uprof-object-state.c \
 	uprof-counter.c \
 	uprof-counter-result-private.h \
