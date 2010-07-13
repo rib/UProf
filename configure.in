@@ -168,6 +168,11 @@ dnl ================================================================
 AC_TYPE_SIGNAL
 AC_CHECK_FUNCS(putenv strdup)
 
+AC_CHECK_LIB(ncursesw, [subwin],
+             [HAVE_NCURSES=yes],
+             [HAVE_NCURSES=no])
+
+AM_CONDITIONAL(HAVE_NCURSES, [test "x$HAVE_NCURSES" = "xyes"])
 
 dnl ================================================================
 dnl What needs to be substituted in other files

@@ -50,9 +50,11 @@ libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_CPPFLAGS = \
     	-I$(top_srcdir)/uprof \
     	@EXTRA_CPPFLAGS@
 
+if HAVE_NCURSES
+
 bin_PROGRAMS = uprof-tool
 uprof_tool_SOURCES = uprof-tool.c
-uprof_tool_LDFLAGS = @UPROF_DEP_LIBS@ -luprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@
+uprof_tool_LDFLAGS = @UPROF_DEP_LIBS@ -luprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@ -lncursesw
 uprof_tool_CFLAGS = @EXTRA_CFLAGS@ @UPROF_DEP_CFLAGS@
 uprof_tool_CPPFLAGS = @EXTRA_CPPFLAGS@
 
@@ -65,6 +67,7 @@ uprof-reportable-glue.h: org.freedesktop.UProf.Reportable.xml Makefile.am
 #example-service-glue.h: example-service.xml Makefile.am
 #	libtool --mode=execute dbus-binding-tool --prefix=some_object --mode=glib-server --output=example-service-glue.h $(srcdir)/example-service.xml
 
+endif
 
 BUILT_SOURCES = uprof-service-glue.h uprof-reportable-glue.h
 
