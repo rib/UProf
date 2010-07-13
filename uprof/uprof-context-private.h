@@ -54,5 +54,8 @@ _uprof_context_for_self_and_links_recursive (UProfContext *context,
                                              UProfContextCallback callback,
                                              gpointer user_data);
 
+void
+_uprof_context_reset (UProfContext *context);
+
 #endif /* _UPROF_CONTEXT_PRIVATE_H_ */
 

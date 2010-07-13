@@ -25,6 +25,8 @@
 #include <uprof-object-state-private.h>
 #include <uprof-counter-result.h>
 #include <uprof-timer-result.h>
+#include <uprof-timer-result-private.h>
+#include <uprof-counter-result-private.h>
 
 #include <glib.h>
 
@@ -488,3 +490,13 @@ uprof_context_foreach_message (UProfContext *context,
     callback (l->data, user_data);
 }
 
+void
+_uprof_context_reset (UProfContext *context)
+{
+  GList *l;
+
+  for (l = context->timers; l; l = l->next)
+    _uprof_timer_result_reset (l->data);
+  for (l = context->counters; l; l = l->next)
+    _uprof_counter_result_reset (l->data);
+}

@@ -36,6 +36,9 @@ uprof_dbus_get_report_proxy (char *report_location);
 char *
 uprof_dbus_get_text_report (const char *bus_name, const char *report_name);
 
+void
+uprof_dbus_reset_report (const char *bus_name, const char *report_name);
+
 G_END_DECLS
 
 #endif /* _UPROF_DBUS_H_ */

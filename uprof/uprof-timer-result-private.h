@@ -27,5 +27,8 @@ _uprof_timer_result_get_total (UProfTimerResult *timer_state);
 GList *
 _uprof_timer_result_get_children (UProfTimerResult *timer);
 
+void
+_uprof_timer_result_reset (UProfTimerResult *timer);
+
 #endif /* _UPROF_TIMER_RESULT_PRIVATE_H_ */
 

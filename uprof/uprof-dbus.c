@@ -249,3 +249,47 @@ uprof_dbus_get_text_report (const char *bus_name, const char *report_name)
   return text_report;
 }
 
+void
+uprof_dbus_reset_report (const char *bus_name, const char *report_name)
+{
+  char *name;
+  char *report_path;
+  DBusGConnection *session_bus;
+  DBusGProxy *proxy;
+  GError *error;
+
+  g_return_if_fail (report_name != NULL);
+
+  name = _uprof_dbus_canonify_name (g_strdup (report_name));
+  if (!bus_name)
+    bus_name = find_first_bus_with_report (name);
+
+  if (!bus_name)
+    return;
+
+  session_bus = dbus_g_bus_get (DBUS_BUS_SESSION, &error);
+
+  report_path = g_strdup_printf ("/org/freedesktop/UProf/Reports/%s",
+                                 name);
+
+  proxy = dbus_g_proxy_new_for_name (session_bus,
+                                     bus_name,
+                                     report_path,
+                                     "org.freedesktop.UProf.Reportable");
+
+  g_free (report_path);
+
+  if (!dbus_g_proxy_call_with_timeout (proxy,
+                                       "Reset",
+                                       1000,
+                                       &error,
+                                       G_TYPE_INVALID,
+                                       G_TYPE_INVALID))
+    {
+      g_warning ("Failed to call Reset: %s", error->message);
+      g_error_free (error);
+    }
+
+  g_object_unref (proxy);
+}
+

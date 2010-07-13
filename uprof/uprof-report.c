@@ -1607,6 +1607,29 @@ _uprof_report_get_text_report (UProfReport *report,
   return TRUE;
 }
 
+static void
+reset_context_cb (UProfContext *context, gpointer user_data)
+{
+  _uprof_context_reset (context);
+}
+
+gboolean
+_uprof_report_reset (UProfReport *report, GError **error)
+{
+  UProfReportPrivate *priv = report->priv;
+  GList *l;
+
+  for (l = priv->contexts; l; l = l->next)
+    {
+      UProfContext *context = l->data;
+      _uprof_context_for_self_and_links_recursive (context,
+                                                   reset_context_cb,
+                                                   NULL);
+    }
+
+  return TRUE;
+}
+
 void
 uprof_report_print (UProfReport *report)
 {

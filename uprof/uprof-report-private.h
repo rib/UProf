@@ -28,5 +28,7 @@ gboolean
 _uprof_report_get_text_report (UProfReport *report,
                                char **text_ret,
                                GError **error);
+gboolean
+_uprof_report_reset (UProfReport *report, GError **error);
 
 #endif /* _UPROF_REPORT_PRIVATE_H_ */

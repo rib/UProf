@@ -6,6 +6,10 @@
       <arg type="s" direction="out"/>
     </method>
 
+    <!-- Resets all the timers and counters to zero -->
+    <method name="Reset">
+    </method>
+
   </interface>
 </node>
 

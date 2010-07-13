@@ -21,4 +21,7 @@
 #ifndef _UPROF_COUNTER_RESULT_PRIVATE_H_
 #define _UPROF_COUNTER_RESULT_PRIVATE_H_
 
+void
+_uprof_counter_result_reset (UProfCounterResult *counter);
+
 #endif /* _UPROF_COUNTER_RESULT_PRIVATE_H_ */

@@ -40,3 +40,9 @@ uprof_counter_result_get_context (UProfCounterResult *counter)
   return counter->object.context;
 }
 
+void
+_uprof_counter_result_reset (UProfCounterResult *counter)
+{
+  counter->count = 0;
+}
+

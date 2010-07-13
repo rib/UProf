@@ -6,8 +6,10 @@
 //#include <glib/gi18n-lib.h>
 
 #include <stdio.h>
+#include <string.h>
 
 static gboolean arg_list = FALSE;
+static gboolean arg_zero = FALSE;
 static char *arg_bus_name = NULL;
 static char *arg_report_name = NULL;
 static char **arg_remaining = NULL;
@@ -40,12 +42,15 @@ static GOptionEntry uprof_tool_args[] = {
   { "report", 'r', 0, G_OPTION_ARG_STRING, &arg_report_name,
     "Specify a report name to act on", NULL },
 
+  { "zero", 'z', 0, G_OPTION_ARG_NONE, &arg_zero,
+    "Reset the timers and counters of a report", NULL },
+
   { G_OPTION_REMAINING, 0, 0, G_OPTION_ARG_STRING_ARRAY, &arg_remaining,
     "COMMAND", NULL },
   { NULL, },
 };
 
-static void
+static char **
 list_reports (void)
 {
   char **names;
@@ -53,7 +58,7 @@ list_reports (void)
   g_print ("Searching via session bus for "
            "org.freedesktop.UProf.Service objects...\n");
   names = uprof_dbus_list_reports ();
-  if (!names)
+  if (!names || names[0] == NULL)
     g_print ("None found!\n");
   else
     {
@@ -66,7 +71,8 @@ list_reports (void)
           g_strfreev (strv);
         }
     }
-  g_strfreev (names);
+
+  return names;
 }
 
 int
@@ -101,13 +107,52 @@ main (int argc, char **argv)
       return 1;
     }
 
-  if (!arg_report_name)
-    arg_list = TRUE;
-
   if (arg_list)
-    list_reports ();
+    {
+      g_strfreev (list_reports ());
+      return 0;
+    }
 
-  if (arg_report_name)
+  if (!arg_report_name)
+    {
+      g_warning ("You need to specify a report name if not passing -l/--list");
+      return 1;
+    }
+
+  /* If no bus name was given then we search all of them for the first
+   * one with a matching report name */
+  if (!arg_bus_name)
+    {
+      char **names = list_reports ();
+      int i;
+
+      for (i = 0; names[i]; i++)
+        {
+          char **strv = g_strsplit (names[i], "@", 0);
+          if (strcmp (strv[0], arg_report_name) == 0)
+            {
+              arg_bus_name = g_strdup (strv[1]);
+              g_strfreev (strv);
+              break;
+            }
+          g_strfreev (strv);
+        }
+      g_strfreev (names);
+
+      if (!arg_bus_name)
+        {
+          g_warning ("Couldn't find a report with name \"%s\" on any bus",
+                     arg_report_name);
+          return 1;
+        }
+    }
+
+  if (!arg_report_name)
+    return 0;
+
+  if (arg_zero)
+    uprof_dbus_reset_report (arg_bus_name, arg_report_name);
+  else
     {
       char *report = uprof_dbus_get_text_report (arg_bus_name,
                                                  arg_report_name);

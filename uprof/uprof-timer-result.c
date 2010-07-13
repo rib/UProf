@@ -104,4 +104,17 @@ uprof_timer_result_get_context (UProfTimerResult *timer)
   return timer->object.context;
 }
 
+void
+_uprof_timer_result_reset (UProfTimerResult *timer)
+{
+  timer->count = 0;
+
+  if (timer->start)
+    timer->start = uprof_get_system_counter();
+
+  timer->total = 0;
+  timer->partial_duration = 0;
+  timer->fastest = 0;
+  timer->slowest = 0;
+}
 
