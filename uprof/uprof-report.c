@@ -412,6 +412,14 @@ find_statistics_group (GList *groups,
   return NULL;
 }
 
+static int
+compare_attribute_names_cb (gconstpointer a, gconstpointer b)
+{
+  const UProfAttribute *attribute0 = a;
+  const UProfAttribute *attribute1 = b;
+  return strcmp (attribute0->name, attribute1->name);
+}
+
 static UProfStatisticsGroup *
 statistics_group_new (UProfStatistic *template_statistic)
 {
@@ -431,7 +439,9 @@ statistics_group_new (UProfStatistic *template_statistic)
       /* nothing else needs to be initialized in a template attribute */
 
       group->template_attributes =
-        g_list_prepend (group->template_attributes, attribute);
+        g_list_insert_sorted (group->template_attributes,
+                              attribute,
+                              compare_attribute_names_cb);
     }
 
   return group;
@@ -529,14 +539,6 @@ find_attribute (GList *attributes, const char *name)
   return NULL;
 }
 
-static int
-compare_attribute_names_cb (gconstpointer a, gconstpointer b)
-{
-  const UProfAttribute *attribute0 = a;
-  const UProfAttribute *attribute1 = b;
-  return strcmp (attribute0->name, attribute1->name);
-}
-
 static GList *
 add_attribute (GList *attributes,
                const char *name,
@@ -608,7 +610,13 @@ groups_list_add_statistic_attribute (GList *groups,
   UProfStatistic *statistic =
     groups_list_remove_statistic (&groups, statistic_name);
 
-  g_return_val_if_fail (statistic != NULL, groups);
+  if (!statistic)
+    {
+      g_warning ("Failed to find a statistic with name \"%s\" when adding"
+                 " attribute \"%s\"",
+                 statistic_name, attribute_name);
+      return groups;
+    }
 
   statistic->attributes =
     add_attribute (statistic->attributes,
@@ -651,7 +659,13 @@ groups_list_remove_statistic_attribute (GList *groups,
   UProfStatistic *statistic =
     groups_list_remove_statistic (&groups, statistic_name);
 
-  g_return_val_if_fail (statistic != NULL, groups);
+  if (!statistic)
+    {
+      g_warning ("Failed to find a statistic with name \"%s\" when removing"
+                 " attribute \"%s\"",
+                 statistic_name, attribute_name);
+      return groups;
+    }
 
   statistic->attributes =
     remove_attribute (statistic->attributes, attribute_name);
