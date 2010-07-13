@@ -199,7 +199,7 @@ uprof_dbus_get_text_report (const char *bus_name, const char *report_name)
   char *report_path;
   DBusGConnection *session_bus;
   DBusGProxy *proxy;
-  GError *error;
+  GError *error = NULL;
   char *text_report;
 
   g_return_val_if_fail (report_name != NULL, FALSE);
@@ -256,7 +256,7 @@ uprof_dbus_reset_report (const char *bus_name, const char *report_name)
   char *report_path;
   DBusGConnection *session_bus;
   DBusGProxy *proxy;
-  GError *error;
+  GError *error = NULL;
 
   g_return_if_fail (report_name != NULL);
 
