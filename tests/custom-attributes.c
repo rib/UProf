@@ -64,12 +64,21 @@ UPROF_STATIC_TIMER (loop1_sub_timer,
 );
 
 static char *
-thingys_cb (UProfReport *report,
+a_values_cb (UProfReport *report,
              const char *statistic_name,
              const char *attribute_name,
              void *user_data)
 {
-  return g_strdup_printf ("%f", 0.5);
+  return g_strdup ("A");
+}
+
+static char *
+b_values_cb (UProfReport *report,
+             const char *statistic_name,
+             const char *attribute_name,
+             void *user_data)
+{
+  return g_strdup ("B");
 }
 
 static char *
@@ -183,18 +192,19 @@ main (int argc, char **argv)
                               "This is a particularly interesting thingy");
   uprof_report_add_statistic_attribute (report,
                                         "Special thingy",
-                                        "Thingy value",
-                                        "Thingy\nvalue",
-                                        "The real value of thingys",
-                                        UPROF_ATTRIBUTE_TYPE_FLOAT,
-                                        thingys_cb, NULL);
+                                        "Thingy A value",
+                                        "Thingy A\nvalue",
+                                        "The real A value of thingys",
+                                        UPROF_ATTRIBUTE_TYPE_WORD,
+                                        a_values_cb, NULL);
   uprof_report_add_statistic_attribute (report,
                                         "Special thingy",
-                                        "Another value",
-                                        "Another\nThingy\nvalue",
-                                        "The real value of thingys",
-                                        UPROF_ATTRIBUTE_TYPE_FLOAT,
-                                        thingys_cb, NULL);
+                                        "Thingy B value",
+                                        "Thingy B\nvalue",
+                                        "The real B value of thingys",
+                                        UPROF_ATTRIBUTE_TYPE_WORD,
+                                        b_values_cb, NULL);
+
   uprof_report_add_statistic (report,
                               "Special dobble",
                               "This is a particularly interesting dobble");
@@ -224,6 +234,7 @@ main (int argc, char **argv)
                                        "The count trippled",
                                        UPROF_ATTRIBUTE_TYPE_INT,
                                        tripple_count_cb, NULL);
+
   uprof_report_add_context (report, context);
   uprof_report_print (report);
   uprof_report_unref (report);
