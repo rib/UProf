@@ -3,16 +3,43 @@
 #include <uprof.h>
 
 #include <glib.h>
-//#include <glib/gi18n-lib.h>
+/* #include <glib/gi18n-lib.h> */
 
 #include <stdio.h>
 #include <string.h>
+#include <ncursesw/ncurses.h>
+#include <locale.h>
+
+#define UPROF_MESSAGE_WIN_HEIGHT 3
+
+#define UT_DEFAULT_COLOR 0
+#define UT_HEADER_COLOR 1
+#define UT_WARNING_COLOR 2
+#define UT_KEY_LABEL_COLOR 3
+
+typedef struct
+{
+  int key0;
+  int key1;
+  char *desc;
+} KeyHandler;
 
 static gboolean arg_list = FALSE;
 static gboolean arg_zero = FALSE;
 static char *arg_bus_name = NULL;
 static char *arg_report_name = NULL;
 static char **arg_remaining = NULL;
+
+static GMainLoop *mainloop;
+
+static WINDOW *titlebar_window;
+static WINDOW *main_window;
+static WINDOW *message_window;
+static WINDOW *keys_window;
+
+static KeyHandler keys[] = {
+  { 'q', 'Q', "Q - Quit" },
+};
 
 static gboolean
 pre_parse_hook (GOptionContext  *context,
@@ -54,11 +81,21 @@ static char **
 list_reports (void)
 {
   char **names;
+  GError *error = NULL;
 
   g_print ("Searching via session bus for "
            "org.freedesktop.UProf.Service objects...\n");
-  names = uprof_dbus_list_reports ();
-  if (!names || names[0] == NULL)
+  names = uprof_dbus_list_reports (&error);
+  if (!names)
+    {
+      if (error->domain == UPROF_DBUS_ERROR &&
+          error->code == UPROF_DBUS_ERROR_UNKNOWN_REPORT)
+        g_print ("None found!\n");
+      else
+        g_print ("Failed to list reports: %s", error->message);
+      g_error_free (error);
+    }
+  else if (names[0] == NULL)
     g_print ("None found!\n");
   else
     {
@@ -75,16 +112,178 @@ list_reports (void)
   return names;
 }
 
+static void
+destroy_windows (void)
+{
+  if (titlebar_window)
+    {
+      delwin (titlebar_window);
+      titlebar_window = NULL;
+    }
+
+  if (main_window)
+    {
+      delwin (main_window);
+      main_window = NULL;
+    }
+
+  if (message_window)
+    {
+      delwin (message_window);
+      message_window = NULL;
+    }
+
+  if (keys_window)
+    {
+      delwin (keys_window);
+      keys_window = NULL;
+    }
+}
+
+static void
+create_windows (void)
+{
+  int maxx, maxy;
+  getmaxyx (stdscr, maxy, maxx);
+
+  titlebar_window = subwin (stdscr, 1, maxx, 0, 0);
+  main_window = subwin (stdscr, maxy - UPROF_MESSAGE_WIN_HEIGHT - 1, maxx,
+                        1, 0);
+  message_window = subwin (stdscr, UPROF_MESSAGE_WIN_HEIGHT, maxx,
+                           maxy - UPROF_MESSAGE_WIN_HEIGHT - 1, 0);
+  keys_window = subwin (stdscr, 1, maxx, maxy - 1, 0);
+}
+
+gboolean
+update_window_cb (void *data)
+{
+  char *report;
+  GError *error;
+  int message_line = 0;
+  int i;
+
+  destroy_windows ();
+  create_windows ();
+
+  wattrset(titlebar_window, COLOR_PAIR(UT_HEADER_COLOR));
+  wbkgd(titlebar_window, COLOR_PAIR(UT_HEADER_COLOR));
+  werase(titlebar_window);
+  mvwprintw (titlebar_window, 0, 0, "     UProfTool version %s", VERSION);
+
+  wattrset(message_window, COLOR_PAIR(UT_WARNING_COLOR));
+  wbkgd(message_window, COLOR_PAIR(UT_WARNING_COLOR));
+  werase(message_window);
+
+  error = NULL;
+  report = uprof_dbus_get_text_report (arg_bus_name, arg_report_name, &error);
+  if (!report)
+    {
+      mvwprintw (message_window, message_line++, 0,
+                 "Failed to fetch report: %s",
+                 error->message);
+      g_error_free (error);
+    }
+  else
+    {
+      werase(main_window);
+      mvwprintw (main_window, 0, 0, "%s", report);
+      g_free (report);
+    }
+
+  error = NULL;
+  if (!uprof_dbus_reset_report (arg_bus_name, arg_report_name, &error))
+    {
+      mvwprintw (message_window, message_line++, 0,
+                 "Failed to zero report statistics: %s",
+                 error->message);
+      g_error_free (error);
+    }
+
+  wattrset(keys_window, COLOR_PAIR(UT_KEY_LABEL_COLOR));
+  wbkgd(keys_window, COLOR_PAIR(UT_KEY_LABEL_COLOR));
+  werase(keys_window);
+  wmove (keys_window, 0, 1);
+  for (i = 0; i < G_N_ELEMENTS (keys); i++)
+    wprintw (keys_window, "%s", keys[i].desc);
+
+  refresh ();
+
+  return TRUE;
+}
+
+static void
+deinit_curses (void)
+{
+  endwin ();
+}
+
+static void
+init_curses (void)
+{
+  initscr ();
+  nonl();
+  intrflush(stdscr, FALSE);
+  keypad(stdscr, TRUE); /* enable arrow keys etc */
+
+  cbreak(); /* don't buffer input up to \n */
+
+  noecho();
+  curs_set(0); /* don't display the cursor */
+
+  start_color();
+  use_default_colors();
+
+  init_pair(UT_DEFAULT_COLOR, COLOR_WHITE, COLOR_BLACK);
+  init_pair(UT_HEADER_COLOR, COLOR_WHITE, COLOR_GREEN);
+  init_pair(UT_WARNING_COLOR, COLOR_YELLOW, COLOR_BLACK);
+  init_pair(UT_KEY_LABEL_COLOR, COLOR_WHITE, COLOR_GREEN);
+
+  g_atexit (deinit_curses);
+}
+
+gboolean
+user_input_cb (GIOChannel *channel,
+               GIOCondition condition,
+               void *user_data)
+{
+#if 0
+  GError *error = NULL;
+  char character;
+
+  while (status = g_io_channel_read_chars (channel,
+                                           &character,
+                                           1,
+                                           &read,
+                                           &error)
+         == G_IO_STATUS_AGAIN)
+    ;
+
+  if (status == G_IO_STATUS_ERROR)
+    g_critical ("Failed to read user input: %s", error->message);
+
+  if (status == G_IO_STATUS_NORMAL)
+    {
+      if (
+    }
+#endif
+  int key = wgetch (stdscr);
+  if (key == 'q')
+    g_main_loop_quit (mainloop);
+
+  return TRUE;
+}
+
 int
 main (int argc, char **argv)
 {
   GOptionContext *context;
   GOptionGroup *group;
   GError *error = NULL;
-  //GMainLoop *mainloop;
+  GIOChannel *stdin_io_channel;
+
+  setlocale(LC_ALL,"");
 
   uprof_init (&argc, &argv);
-
 
   context = g_option_context_new (NULL);
 
@@ -147,18 +346,21 @@ main (int argc, char **argv)
         }
     }
 
-  if (!arg_report_name)
-    return 0;
+  init_curses ();
 
-  if (arg_zero)
-    uprof_dbus_reset_report (arg_bus_name, arg_report_name);
-  else
-    {
-      char *report = uprof_dbus_get_text_report (arg_bus_name,
-                                                 arg_report_name);
-      printf ("%s", report);
-      g_free (report);
-    }
+  mainloop = g_main_loop_new (NULL, FALSE);
+
+  stdin_io_channel = g_io_channel_unix_new (0);
+  g_io_add_watch (stdin_io_channel,
+                  G_IO_IN,
+                  user_input_cb,
+                  NULL);
+
+  g_timeout_add_seconds (1, update_window_cb, NULL);
+
+  g_main_loop_run (mainloop);
+
+  g_io_channel_unref (stdin_io_channel);
 
   return 0;
 }
