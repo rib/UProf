@@ -27,6 +27,12 @@
 #include <glib/gprintf.h>
 #include <string.h>
 
+GQuark
+uprof_dbus_error_quark (void)
+{
+  return g_quark_from_static_string ("uprof-dbus-error-quark");
+}
+
 static char dbus_obj_name_chars[] =
   "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
@@ -37,27 +43,28 @@ _uprof_dbus_canonify_name (char *name)
 }
 
 static char **
-get_all_session_bus_names (void)
+get_all_session_bus_names (GError **error)
 {
   DBusGConnection *session_bus;
   DBusGProxy *bus_proxy;
-  GError *error = NULL;
   char **bus_names;
 
-  session_bus = dbus_g_bus_get (DBUS_BUS_SESSION, &error);
+  session_bus = dbus_g_bus_get (DBUS_BUS_SESSION, error);
+  if (!session_bus)
+    return NULL;
 
   bus_proxy = dbus_g_proxy_new_for_name (session_bus,
                                          "org.freedesktop.DBus",
                                          "/org/freedesktop/DBus",
                                          "org.freedesktop.DBus");
 
-  if (!dbus_g_proxy_call (bus_proxy, "ListNames", &error,
+  if (!dbus_g_proxy_call (bus_proxy, "ListNames", error,
                           G_TYPE_INVALID,
                           G_TYPE_STRV, &bus_names,
                           G_TYPE_INVALID))
     {
-      g_warning ("Failed to ListNames: %s", error->message);
-      g_error_free (error);
+      g_object_unref (bus_proxy);
+      return NULL;
     }
 
   g_object_unref (bus_proxy);
@@ -104,7 +111,7 @@ typedef struct
 } ReportListEntry;
 
 char **
-uprof_dbus_list_reports (void)
+uprof_dbus_list_reports (GError **error)
 {
   char **bus_names;
   char **report_names = NULL;
@@ -114,7 +121,9 @@ uprof_dbus_list_reports (void)
   int n_names;
   GList *l;
 
-  bus_names = get_all_session_bus_names ();
+  bus_names = get_all_session_bus_names (error);
+  if (!bus_names)
+    return NULL;
 
   for (i = 0; bus_names[i]; i++)
     {
@@ -161,11 +170,15 @@ uprof_dbus_list_reports (void)
 }
 
 static char *
-find_first_bus_with_report (const char *report_name)
+find_first_bus_with_report (const char *report_name,
+                            GError **error)
 {
-  char **bus_names = get_all_session_bus_names ();
+  char **bus_names = get_all_session_bus_names (error);
   char *bus_name = NULL;
   int i;
+
+  if (!bus_names)
+    return NULL;
 
   for (i = 0; bus_names[i]; i++)
     {
@@ -187,31 +200,43 @@ find_first_bus_with_report (const char *report_name)
 
   g_strfreev (bus_names);
 
+  if (!bus_name)
+    {
+      g_set_error (error,
+                   UPROF_DBUS_ERROR,
+                   UPROF_DBUS_ERROR_UNKNOWN_REPORT,
+                   "Failed to find the report named \"%s\"",
+                   report_name);
+    }
+
   return bus_name;
 }
 
 /* XXX: eventually this will be deprecated and we'll instead have a
  * UProfReportableProxy object instead. */
 char *
-uprof_dbus_get_text_report (const char *bus_name, const char *report_name)
+uprof_dbus_get_text_report (const char *bus_name,
+                            const char *report_name,
+                            GError **error)
 {
   char *name;
   char *report_path;
   DBusGConnection *session_bus;
   DBusGProxy *proxy;
-  GError *error = NULL;
   char *text_report;
 
   g_return_val_if_fail (report_name != NULL, FALSE);
 
   name = _uprof_dbus_canonify_name (g_strdup (report_name));
   if (!bus_name)
-    bus_name = find_first_bus_with_report (name);
+    {
+      bus_name = find_first_bus_with_report (name, error);
+      return NULL;
+    }
 
-  if (!bus_name)
+  session_bus = dbus_g_bus_get (DBUS_BUS_SESSION, error);
+  if (!session_bus)
     return NULL;
-
-  session_bus = dbus_g_bus_get (DBUS_BUS_SESSION, &error);
 
   report_path = g_strdup_printf ("/org/freedesktop/UProf/Reports/%s",
                                  name);
@@ -226,48 +251,42 @@ uprof_dbus_get_text_report (const char *bus_name, const char *report_name)
   if (!dbus_g_proxy_call_with_timeout (proxy,
                                        "GetTextReport",
                                        1000,
-                                       &error,
+                                       error,
                                        G_TYPE_INVALID,
                                        G_TYPE_STRING, &text_report,
                                        G_TYPE_INVALID))
     {
-      g_warning ("Failed to call GetTextReport: %s", error->message);
-      g_error_free (error);
       text_report = NULL;
     }
-
-#if 0
-  dbus_g_proxy_call_no_reply (proxy,
-                              "GetTextReport",
-                              G_TYPE_INVALID,
-                              G_TYPE_STRING, &text_report,
-                              G_TYPE_INVALID);
-#endif
 
   g_object_unref (proxy);
 
   return text_report;
 }
 
-void
-uprof_dbus_reset_report (const char *bus_name, const char *report_name)
+gboolean
+uprof_dbus_reset_report (const char *bus_name,
+                         const char *report_name,
+                         GError **error)
 {
   char *name;
   char *report_path;
   DBusGConnection *session_bus;
   DBusGProxy *proxy;
-  GError *error = NULL;
 
-  g_return_if_fail (report_name != NULL);
+  g_return_val_if_fail (report_name != NULL, FALSE);
 
   name = _uprof_dbus_canonify_name (g_strdup (report_name));
   if (!bus_name)
-    bus_name = find_first_bus_with_report (name);
+    {
+      bus_name = find_first_bus_with_report (name, error);
+      if (!bus_name)
+        return FALSE;
+    }
 
-  if (!bus_name)
-    return;
-
-  session_bus = dbus_g_bus_get (DBUS_BUS_SESSION, &error);
+  session_bus = dbus_g_bus_get (DBUS_BUS_SESSION, error);
+  if (!session_bus)
+    return FALSE;
 
   report_path = g_strdup_printf ("/org/freedesktop/UProf/Reports/%s",
                                  name);
@@ -282,14 +301,16 @@ uprof_dbus_reset_report (const char *bus_name, const char *report_name)
   if (!dbus_g_proxy_call_with_timeout (proxy,
                                        "Reset",
                                        1000,
-                                       &error,
+                                       error,
                                        G_TYPE_INVALID,
                                        G_TYPE_INVALID))
     {
-      g_warning ("Failed to call Reset: %s", error->message);
-      g_error_free (error);
+      g_object_unref (proxy);
+      return FALSE;
     }
 
   g_object_unref (proxy);
+
+  return TRUE;
 }
 

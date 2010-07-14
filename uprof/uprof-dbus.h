@@ -25,8 +25,32 @@
 
 G_BEGIN_DECLS
 
+/**
+ * UPROF_DBUS_ERROR:
+ *
+ * #GError domain for the uprof dbus API
+ *
+ * Since: 0.4
+ */
+#define UPROF_DBUS_ERROR (uprof_dbus_error_quark ())
+
+/**
+ * UProfDbusError:
+ * @UPROF_DBUS_ERROR_UNKNOWN_REPORT: Given report name could not be found
+ *
+ * Error enumeration for the uprof dbus API.
+ *
+ * Since: 0.4
+ */
+typedef enum { /*< prefix=UPROF_DBUS_ERROR >*/
+  UPROF_DBUS_ERROR_UNKNOWN_REPORT,
+} CoglBlendStringError;
+
+GQuark
+uprof_dbus_error_quark (void);
+
 char **
-uprof_dbus_list_reports (void);
+uprof_dbus_list_reports (GError **error);
 
 #if 0
 UProfDBusReportProxy *
@@ -34,10 +58,14 @@ uprof_dbus_get_report_proxy (char *report_location);
 #endif
 
 char *
-uprof_dbus_get_text_report (const char *bus_name, const char *report_name);
+uprof_dbus_get_text_report (const char *bus_name,
+                            const char *report_name,
+                            GError **error);
 
-void
-uprof_dbus_reset_report (const char *bus_name, const char *report_name);
+gboolean
+uprof_dbus_reset_report (const char *bus_name,
+                         const char *report_name,
+                         GError **error);
 
 G_END_DECLS
 
