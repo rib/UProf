@@ -44,7 +44,7 @@ G_BEGIN_DECLS
  */
 typedef enum { /*< prefix=UPROF_DBUS_ERROR >*/
   UPROF_DBUS_ERROR_UNKNOWN_REPORT,
-} CoglBlendStringError;
+} UProfDBusError;
 
 GQuark
 uprof_dbus_error_quark (void);

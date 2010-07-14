@@ -2,13 +2,27 @@
 
 <node name="/">
   <interface name="org.freedesktop.UProf.Reportable">
+    <!-- Requests a text formatted report -->
     <method name="GetTextReport">
       <arg type="s" direction="out"/>
     </method>
 
     <!-- Resets all the timers and counters to zero -->
-    <method name="Reset">
+    <method name="Reset"/>
+
+    <!-- Enable/Disable the signaling of trace message -->
+    <method name="EnableTraceMessages">
+      <arg type="s" direction="in"/> <!-- context name -->
     </method>
+    <method name="DisableTraceMessages">
+      <arg type="s" direction="in"/> <!-- context name -->
+    </method>
+
+    <!-- emits a formatted trace message -->
+    <signal name="TraceMessage">
+      <arg type="s"/> <!-- context name -->
+      <arg type="s"/> <!-- message -->
+    </signal>
 
   </interface>
 </node>

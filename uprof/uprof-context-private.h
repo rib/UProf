@@ -44,6 +44,10 @@ struct _UProfContext
   GList *root_timers;
 
   GList *report_messages;
+
+  int tracing_enabled;
+  GList *trace_message_callbacks;
+  int next_trace_message_callbacks_id;
 };
 
 typedef void (*UProfContextCallback) (UProfContext *context,
@@ -56,6 +60,20 @@ _uprof_context_for_self_and_links_recursive (UProfContext *context,
 
 void
 _uprof_context_reset (UProfContext *context);
+
+typedef void (*UProfContextTraceMessageCallback) (UProfContext *context,
+                                                  const char *message,
+                                                  void *user_data);
+
+int
+_uprof_context_add_trace_message_callback (
+                                     UProfContext *context,
+                                     UProfContextTraceMessageCallback callback,
+                                     void *user_data);
+
+void
+_uprof_context_remove_trace_message_callback (UProfContext *context,
+                                              int id);
 
 #endif /* _UPROF_CONTEXT_PRIVATE_H_ */
 

@@ -31,4 +31,14 @@ _uprof_report_get_text_report (UProfReport *report,
 gboolean
 _uprof_report_reset (UProfReport *report, GError **error);
 
+gboolean
+_uprof_report_enable_trace_messages (UProfReport *report,
+                                     const char *context,
+                                     GError **error);
+
+gboolean
+_uprof_report_disable_trace_messages (UProfReport *report,
+                                      const char *context,
+                                      GError **error);
+
 #endif /* _UPROF_REPORT_PRIVATE_H_ */

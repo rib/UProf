@@ -500,3 +500,74 @@ _uprof_context_reset (UProfContext *context)
   for (l = context->counters; l; l = l->next)
     _uprof_counter_result_reset (l->data);
 }
+
+typedef struct
+{
+  int id;
+  UProfContextTraceMessageCallback callback;
+  void *user_data;
+} UProfContextTraceMessageFunc;
+
+int
+_uprof_context_add_trace_message_callback (
+                                     UProfContext *context,
+                                     UProfContextTraceMessageCallback callback,
+                                     void *user_data)
+{
+  UProfContextTraceMessageFunc *func =
+    g_slice_new (UProfContextTraceMessageFunc);
+
+  func->id = context->next_trace_message_callbacks_id++;
+  func->callback = callback;
+  func->user_data = user_data;
+
+  context->trace_message_callbacks =
+    g_list_prepend (context->trace_message_callbacks, func);
+
+  return func->id;
+}
+
+void
+_uprof_context_remove_trace_message_callback (UProfContext *context,
+                                              int id)
+{
+  GList *l;
+
+  for (l = context->trace_message_callbacks; l; l = l->next)
+    {
+      UProfContextTraceMessageFunc *func = l->data;
+      if (func->id == id)
+        {
+          g_slice_free (UProfContextTraceMessageFunc, func);
+          context->trace_message_callbacks =
+            g_list_delete_link (context->trace_message_callbacks, l);
+          return;
+        }
+    }
+}
+
+void
+uprof_context_trace_message (UProfContext *context,
+                             const char *format,
+                             ...)
+{
+  if (context->tracing_enabled && context->trace_message_callbacks)
+    {
+      va_list ap;
+      char *message;
+      GList *l;
+
+      va_start (ap, format);
+
+      message = g_strdup_vprintf (format, ap);
+      for (l = context->trace_message_callbacks; l; l = l->next)
+        {
+          UProfContextTraceMessageFunc *func = l->data;
+          func->callback (context, message, func->user_data);
+        }
+      g_free (message);
+
+      va_end (ap);
+    }
+}
+

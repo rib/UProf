@@ -21,6 +21,7 @@
 
 #include "uprof.h"
 #include "uprof-private.h"
+#include "uprof-marshal.h"
 #include "uprof-timer-result.h"
 #include "uprof-timer-result-private.h"
 #include "uprof-context-private.h"
@@ -36,6 +37,12 @@
 
 #define UPROF_REPORT_GET_PRIVATE(obj) \
   (G_TYPE_INSTANCE_GET_PRIVATE ((obj), UPROF_TYPE_REPORT, UProfReportPrivate))
+
+typedef struct
+{
+  UProfContext *context;
+  int trace_messages_callback_id;
+} UProfReportContextReference;
 
 typedef struct _UProfReportRecord
 {
@@ -116,7 +123,22 @@ enum
   PROP_NAME
 };
 
+enum
+{
+  TRACE_MESSAGE,
+
+  LAST_SIGNAL
+};
+
+static guint signals[LAST_SIGNAL] = { 0 };
+
 G_DEFINE_TYPE (UProfReport, uprof_report, G_TYPE_OBJECT)
+
+GQuark
+uprof_report_error_quark (void)
+{
+  return g_quark_from_static_string ("uprof-report-error-quark");
+}
 
 static void
 _uprof_report_setup_dbus_reporter_object (UProfReport *report)
@@ -231,6 +253,8 @@ uprof_report_finalize (GObject *object)
   UProfReport *report = UPROF_REPORT (object);
   UProfReportPrivate *priv = report->priv;
   UProfService *service;
+  GList *contexts;
+  GList *l;
 
   service = _uprof_get_service ();
   _uprof_service_remove_report (service, report);
@@ -240,6 +264,14 @@ uprof_report_finalize (GObject *object)
   g_list_foreach (priv->statistics_groups, (GFunc)free_statistics_group, NULL);
   g_list_foreach (priv->timer_attributes, (GFunc)free_attribute, NULL);
   g_list_foreach (priv->counter_attributes, (GFunc)free_attribute, NULL);
+
+  contexts = g_list_copy (priv->contexts);
+  for (l = priv->contexts; l; l = l->next)
+    {
+      UProfReportContextReference *ref = l->data;
+      uprof_report_remove_context (report, ref->context);
+    }
+  g_list_free (contexts);
 
   G_OBJECT_CLASS (uprof_report_parent_class)->finalize (object);
 }
@@ -265,6 +297,15 @@ uprof_report_class_init (UProfReportClass *klass)
                                G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_NAME |
                                G_PARAM_STATIC_BLURB | G_PARAM_STATIC_NICK);
   g_object_class_install_property (object_class, PROP_NAME, pspec);
+
+  signals[TRACE_MESSAGE] =
+    g_signal_new ("trace-message",
+                  G_OBJECT_CLASS_TYPE (klass),
+                  G_SIGNAL_RUN_LAST | G_SIGNAL_DETAILED,
+                  0,
+                  NULL, NULL,
+                  _uprof_marshal_VOID__STRING_STRING,
+                  G_TYPE_NONE, 1, G_TYPE_STRING);
 }
 
 
@@ -311,11 +352,50 @@ uprof_report_unref (UProfReport *report)
 }
 
 void
+context_trace_message_cb (UProfContext *context,
+                          const char *message,
+                          void *user_data)
+{
+  UProfReport *report = user_data;
+
+  g_signal_emit (report, signals[TRACE_MESSAGE], 0,
+                 context->name,
+                 message);
+}
+
+void
 uprof_report_add_context (UProfReport *report,
                           UProfContext *context)
 {
   UProfReportPrivate *priv = report->priv;
-  priv->contexts = g_list_prepend (priv->contexts, context);
+  UProfReportContextReference *ref = g_slice_new (UProfReportContextReference);
+
+  ref->context = uprof_context_ref (context);
+  ref->trace_messages_callback_id =
+    _uprof_context_add_trace_message_callback (context,
+                                               context_trace_message_cb,
+                                               report);
+
+  priv->contexts = g_list_prepend (priv->contexts, ref);
+}
+
+void
+uprof_report_remove_context (UProfReport *report,
+                             UProfContext *context)
+{
+  UProfReportPrivate *priv = report->priv;
+  GList *l;
+
+  for (l = priv->contexts; l; l = l->next)
+    {
+      UProfReportContextReference *ref = l->data;
+      int id = ref->trace_messages_callback_id;
+
+      _uprof_context_remove_trace_message_callback (ref->context, id);
+      uprof_context_unref (ref->context);
+      g_slice_free (UProfReportContextReference, ref);
+      priv->contexts = g_list_delete_link (priv->contexts, l);
+    }
 }
 
 void
@@ -1636,5 +1716,74 @@ uprof_report_print (UProfReport *report)
   char *output = generate_uprof_report (report);
   printf ("%s", output);
   g_free (output);
+}
+
+UProfReportContextReference *
+find_context_reference (UProfReport *report, const char *name)
+{
+  UProfReportPrivate *priv = report->priv;
+  GList *l;
+  for (l = priv->contexts; l; l = l->next)
+    {
+      UProfReportContextReference *ref = l->data;
+      if (strcmp (ref->context->name, name) == 0)
+        return ref;
+    }
+
+  return NULL;
+}
+
+gboolean
+_uprof_report_enable_trace_messages (UProfReport *report,
+                                     const char *context,
+                                     GError **error)
+{
+  UProfReportPrivate *priv = report->priv;
+  UProfReportContextReference *ref =
+    find_context_reference (report, context);
+
+  if (ref)
+    {
+      ref->context->tracing_enabled++;
+      return TRUE;
+    }
+
+  g_set_error (error,
+               UPROF_REPORT_ERROR,
+               UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
+               "Could not find a context named \"%s\" associated with "
+               "report \"%s\"",
+               context,
+               priv->name);
+
+  return FALSE;
+}
+
+gboolean
+_uprof_report_disable_trace_messages (UProfReport *report,
+                                      const char *context,
+                                      GError **error)
+{
+  UProfReportPrivate *priv = report->priv;
+  UProfReportContextReference *ref =
+    find_context_reference (report, context);
+
+  if (ref)
+    {
+      g_return_val_if_fail (ref->context->tracing_enabled > 1, TRUE);
+
+      ref->context->tracing_enabled--;
+      return TRUE;
+    }
+
+  g_set_error (error,
+               UPROF_REPORT_ERROR,
+               UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
+               "Could not find a context named \"%s\" associated with "
+               "report \"%s\"",
+               context,
+               priv->name);
+
+  return FALSE;
 }
 

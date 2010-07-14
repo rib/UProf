@@ -346,6 +346,33 @@ uprof_context_foreach_message (UProfContext *context,
                                UProfMessageCallback callback,
                                gpointer user_data);
 
+/**
+ * uprof_context_trace_message:
+ * @context: A #UProfContext
+ * @format: A printf style format string
+ * @Varargs: The values that plug into the given @format string.
+ *
+ * Routes a trace message through UProf. It's common that applications and
+ * libraries have certain debug options that enable tracing the application's
+ * control flow by printing messages to the terminal with enough contextual
+ * information to resolve what component or line of code is emitting each
+ * message.
+ *
+ * If you can make your application format its contextual information according
+ * to this convention:
+ *
+ * |[
+ *   "[category1,category0,categoryA] filename:line:function: message"
+ * ]|
+ *
+ * Then uprof can dissect it and pass it on to other tools that may provide
+ * more advanced navigation and matching of your application traces.
+ */
+void
+uprof_context_trace_message (UProfContext *context,
+                             const char *format,
+                             ...);
+
 G_END_DECLS
 
 #endif /* _UPROF_CONTEXT_H_ */

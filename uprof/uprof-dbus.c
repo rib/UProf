@@ -212,18 +212,15 @@ find_first_bus_with_report (const char *report_name,
   return bus_name;
 }
 
-/* XXX: eventually this will be deprecated and we'll instead have a
- * UProfReportableProxy object instead. */
-char *
-uprof_dbus_get_text_report (const char *bus_name,
-                            const char *report_name,
-                            GError **error)
+DBusGProxy *
+_uprof_dbus_get_report_proxy (const char *bus_name,
+                              const char *report_name,
+                              GError **error)
 {
   char *name;
   char *report_path;
   DBusGConnection *session_bus;
   DBusGProxy *proxy;
-  char *text_report;
 
   g_return_val_if_fail (report_name != NULL, FALSE);
 
@@ -248,6 +245,23 @@ uprof_dbus_get_text_report (const char *bus_name,
 
   g_free (report_path);
 
+  return proxy;
+}
+
+/* XXX: eventually this will be deprecated and we'll instead have a
+ * UProfReportableProxy object instead. */
+char *
+uprof_dbus_get_text_report (const char *bus_name,
+                            const char *report_name,
+                            GError **error)
+{
+  DBusGProxy *proxy;
+  char *text_report;
+
+  proxy =_uprof_dbus_get_report_proxy (bus_name, report_name, error);
+  if (!proxy)
+    return NULL;
+
   if (!dbus_g_proxy_call_with_timeout (proxy,
                                        "GetTextReport",
                                        1000,
@@ -269,40 +283,75 @@ uprof_dbus_reset_report (const char *bus_name,
                          const char *report_name,
                          GError **error)
 {
-  char *name;
-  char *report_path;
-  DBusGConnection *session_bus;
   DBusGProxy *proxy;
 
-  g_return_val_if_fail (report_name != NULL, FALSE);
-
-  name = _uprof_dbus_canonify_name (g_strdup (report_name));
-  if (!bus_name)
-    {
-      bus_name = find_first_bus_with_report (name, error);
-      if (!bus_name)
-        return FALSE;
-    }
-
-  session_bus = dbus_g_bus_get (DBUS_BUS_SESSION, error);
-  if (!session_bus)
+  proxy =_uprof_dbus_get_report_proxy (bus_name, report_name, error);
+  if (!proxy)
     return FALSE;
-
-  report_path = g_strdup_printf ("/org/freedesktop/UProf/Reports/%s",
-                                 name);
-
-  proxy = dbus_g_proxy_new_for_name (session_bus,
-                                     bus_name,
-                                     report_path,
-                                     "org.freedesktop.UProf.Reportable");
-
-  g_free (report_path);
 
   if (!dbus_g_proxy_call_with_timeout (proxy,
                                        "Reset",
                                        1000,
                                        error,
                                        G_TYPE_INVALID,
+                                       G_TYPE_INVALID))
+    {
+      g_object_unref (proxy);
+      return FALSE;
+    }
+
+  g_object_unref (proxy);
+
+  return TRUE;
+}
+
+gboolean
+uprof_dbus_enable_trace_messages (const char *bus_name,
+                                  const char *report_name,
+                                  const char *context_name,
+                                  GError **error)
+{
+  DBusGProxy *proxy;
+
+  proxy = _uprof_dbus_get_report_proxy (bus_name, report_name, error);
+  if (!proxy)
+    return FALSE;
+
+  if (!dbus_g_proxy_call_with_timeout (proxy,
+                                       "EnableTraceMessages",
+                                       1000,
+                                       error,
+                                       G_TYPE_INVALID,
+                                       G_TYPE_STRING, &context_name,
+                                       G_TYPE_INVALID))
+    {
+      g_object_unref (proxy);
+      return FALSE;
+    }
+
+  g_object_unref (proxy);
+
+  return TRUE;
+}
+
+gboolean
+uprof_dbus_disable_trace_messages (const char *bus_name,
+                                   const char *report_name,
+                                   const char *context_name,
+                                   GError **error)
+{
+  DBusGProxy *proxy;
+
+  proxy = _uprof_dbus_get_report_proxy (bus_name, report_name, error);
+  if (!proxy)
+    return FALSE;
+
+  if (!dbus_g_proxy_call_with_timeout (proxy,
+                                       "DisableTraceMessages",
+                                       1000,
+                                       error,
+                                       G_TYPE_INVALID,
+                                       G_TYPE_STRING, &context_name,
                                        G_TYPE_INVALID))
     {
       g_object_unref (proxy);

@@ -90,6 +90,30 @@ void
 uprof_report_unref (UProfReport *report);
 
 /**
+ * UPROF_REPORT_ERROR:
+ *
+ * #GError domain for the uprof report API
+ *
+ * Since: 0.4
+ */
+#define UPROF_REPORT_ERROR (uprof_report_error_quark ())
+
+/**
+ * UProfReportError:
+ * @UPROF_REPORT_ERROR_UNKNOWN_CONTEXT: Given context name could not be found
+ *
+ * Error enumeration for the uprof report API.
+ *
+ * Since: 0.4
+ */
+typedef enum { /*< prefix=UPROF_REPORT_ERROR >*/
+  UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
+} UProfReportError;
+
+GQuark
+uprof_report_error_quark (void);
+
+/**
  * uprof_report_get_name:
  * @report: A #UProfReport object
  *
@@ -112,6 +136,20 @@ uprof_report_get_name (UProfReport *report);
 void
 uprof_report_add_context (UProfReport *report,
                           UProfContext *context);
+
+/**
+ * uprof_report_remove_context:
+ * @report: A #UProfReport object
+ * @context: a #UProfContext object
+ *
+ * Disasociates a context from a report object so when the report is
+ * generated it won't include statistics relating to this context.
+ *
+ * Since: 0.4
+ */
+void
+uprof_report_remove_context (UProfReport *report,
+                             UProfContext *context);
 
 /**
  * UProfReportInitCallback:

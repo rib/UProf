@@ -31,6 +31,7 @@ libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_SOURCES = \
 	uprof-report.c \
 	uprof-dbus-private.h \
 	uprof-dbus.c \
+	uprof-marshal.c \
 	$(public_h_source)
 
 libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_LIBADD = -lrt
@@ -58,6 +59,8 @@ uprof_tool_LDFLAGS = @UPROF_DEP_LIBS@ -luprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR
 uprof_tool_CFLAGS = @EXTRA_CFLAGS@ @UPROF_DEP_CFLAGS@
 uprof_tool_CPPFLAGS = @EXTRA_CPPFLAGS@
 
+endif
+
 uprof-service-glue.h: org.freedesktop.UProf.Service.xml Makefile.am
 	$(AM_V_GEN)dbus-binding-tool --prefix=_uprof_service --mode=glib-server --output=uprof-service-glue.h $(srcdir)/org.freedesktop.UProf.Service.xml
 
@@ -67,9 +70,15 @@ uprof-reportable-glue.h: org.freedesktop.UProf.Reportable.xml Makefile.am
 #example-service-glue.h: example-service.xml Makefile.am
 #	libtool --mode=execute dbus-binding-tool --prefix=some_object --mode=glib-server --output=example-service-glue.h $(srcdir)/example-service.xml
 
-endif
-
 BUILT_SOURCES = uprof-service-glue.h uprof-reportable-glue.h
+CLEANFILES =
+DISTCLEANFILES =
+EXTRA_DIST =
+
+glib_marshal_list = uprof-marshal.list
+glib_marshal_prefix = _uprof_marshal
+#NB this will append to BUILT_SOURCES for us
+include $(top_srcdir)/build/autotools/Makefile.am.marshal
 
 uprofincludedir = $(includedir)/uprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@
 uprofinclude_HEADERS = $(public_h_source)
