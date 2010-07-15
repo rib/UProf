@@ -1733,30 +1733,65 @@ find_context_reference (UProfReport *report, const char *name)
   return NULL;
 }
 
+static void
+foreach_context (UProfReport *report,
+                 void (*callback) (UProfContext *context))
+{
+  UProfReportPrivate *priv = report->priv;
+  GList *l;
+
+  for (l = priv->contexts; l; l = l->next)
+    {
+      UProfReportContextReference *ref = l->data;
+      callback (ref->context);
+    }
+}
+
+static void
+inc_tracing_enabled_cb (UProfContext *context)
+{
+  context->tracing_enabled++;
+}
+
 gboolean
 _uprof_report_enable_trace_messages (UProfReport *report,
                                      const char *context,
                                      GError **error)
 {
   UProfReportPrivate *priv = report->priv;
-  UProfReportContextReference *ref =
-    find_context_reference (report, context);
+  UProfReportContextReference *ref;
 
-  if (ref)
+  if (context)
     {
-      ref->context->tracing_enabled++;
-      return TRUE;
+      ref = find_context_reference (report, context);
+      if (ref)
+        {
+          ref->context->tracing_enabled++;
+          return TRUE;
+        }
+      else
+        {
+          g_set_error (error,
+                       UPROF_REPORT_ERROR,
+                       UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
+                       "Could not find a context named \"%s\" associated with "
+                       "report \"%s\"",
+                       context,
+                       priv->name);
+          return FALSE;
+        }
     }
-
-  g_set_error (error,
-               UPROF_REPORT_ERROR,
-               UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
-               "Could not find a context named \"%s\" associated with "
-               "report \"%s\"",
-               context,
-               priv->name);
+  else
+    foreach_context (report, inc_tracing_enabled_cb);
 
   return FALSE;
+}
+
+static void
+dec_tracing_enabled_cb (UProfContext *context)
+{
+  g_return_if_fail (context->tracing_enabled <= 0);
+  context->tracing_enabled--;
 }
 
 gboolean
@@ -1765,24 +1800,30 @@ _uprof_report_disable_trace_messages (UProfReport *report,
                                       GError **error)
 {
   UProfReportPrivate *priv = report->priv;
-  UProfReportContextReference *ref =
-    find_context_reference (report, context);
+  UProfReportContextReference *ref;
 
-  if (ref)
+  if (context)
     {
-      g_return_val_if_fail (ref->context->tracing_enabled > 1, TRUE);
-
-      ref->context->tracing_enabled--;
-      return TRUE;
+      ref = find_context_reference (report, context);
+      if (ref)
+        {
+          dec_tracing_enabled_cb (ref->context);
+          return TRUE;
+        }
+      else
+        {
+          g_set_error (error,
+                       UPROF_REPORT_ERROR,
+                       UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
+                       "Could not find a context named \"%s\" associated with "
+                       "report \"%s\"",
+                       context,
+                       priv->name);
+          return FALSE;
+        }
     }
-
-  g_set_error (error,
-               UPROF_REPORT_ERROR,
-               UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
-               "Could not find a context named \"%s\" associated with "
-               "report \"%s\"",
-               context,
-               priv->name);
+  else
+    foreach_context (report, dec_tracing_enabled_cb);
 
   return FALSE;
 }

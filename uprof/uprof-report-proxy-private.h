@@ -18,48 +18,28 @@
  * MA  02110-1301  USA
  */
 
-#ifndef _UPROF_DBUS_H_
-#define _UPROF_DBUS_H_
+#ifndef _UPROF_REPORT_PROXY_PRIVATE_H_
+#define _UPROF_REPORT_PROXY_PRIVATE_H_
 
 #include <glib.h>
 
-#include <uprof/uprof-report-proxy.h>
+#include <dbus/dbus-glib.h>
 
-G_BEGIN_DECLS
+struct _UProfReportProxy
+{
+  int ref;
 
-/**
- * UPROF_DBUS_ERROR:
- *
- * #GError domain for the uprof dbus API
- *
- * Since: 0.4
- */
-#define UPROF_DBUS_ERROR (uprof_dbus_error_quark ())
+  char *bus_name;
+  char *report_name;
+  DBusGProxy *dbus_g_proxy;
 
-/**
- * UProfDbusError:
- * @UPROF_DBUS_ERROR_UNKNOWN_REPORT: Given report name could not be found
- *
- * Error enumeration for the uprof dbus API.
- *
- * Since: 0.4
- */
-typedef enum { /*< prefix=UPROF_DBUS_ERROR >*/
-  UPROF_DBUS_ERROR_UNKNOWN_REPORT,
-  UPROF_DBUS_ERROR_DISCONNECTED
-} UProfDBusError;
-
-GQuark
-uprof_dbus_error_quark (void);
-
-char **
-uprof_dbus_list_reports (GError **error);
+  gboolean destroyed;
+};
 
 UProfReportProxy *
-uprof_dbus_get_report_proxy (const char *report_location,
-                             GError **error);
+_uprof_report_proxy_new (const char *bus_name,
+                         const char *report_name,
+                         DBusGProxy *dbus_g_proxy);
 
-G_END_DECLS
-
-#endif /* _UPROF_DBUS_H_ */
+#endif /* _UPROF_REPORT_PROXY_PRIVATE_H_ */
 

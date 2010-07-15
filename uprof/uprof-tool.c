@@ -1,3 +1,23 @@
+/* This file is part of UProf.
+ *
+ * Copyright © 2010 Robert Bragg
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ * MA  02110-1301  USA
+ */
+
 #include <config.h>
 
 #include <uprof.h>
@@ -24,6 +44,18 @@ typedef struct
   char *desc;
 } KeyHandler;
 
+typedef enum
+{
+  UT_WARN_LEVEL_NORMAL,
+  UT_WARN_LEVEL_HIGH
+} UTWarnLevel;
+
+typedef struct
+{
+  UTWarnLevel level;
+  char *warning;
+} UTWarningEntry;
+
 static gboolean arg_list = FALSE;
 static gboolean arg_zero = FALSE;
 static char *arg_bus_name = NULL;
@@ -32,10 +64,20 @@ static char **arg_remaining = NULL;
 
 static GMainLoop *mainloop;
 
+static UProfReportProxy *report_proxy;
+
+#define UT_MAX_WARNING_COUNT 3
+GQueue *warning_queue;
+
 static WINDOW *titlebar_window;
 static WINDOW *main_window;
 static WINDOW *message_window;
 static WINDOW *keys_window;
+
+static int n_pages = 2;
+static int current_page = 0;
+
+static gboolean trace_enabled = FALSE;
 
 static KeyHandler keys[] = {
   { 'q', 'Q', "Q - Quit" },
@@ -154,28 +196,16 @@ create_windows (void)
   keys_window = subwin (stdscr, 1, maxx, maxy - 1, 0);
 }
 
-gboolean
-update_window_cb (void *data)
+void
+print_timers_counters_page (void)
 {
-  char *report;
-  GError *error;
   int message_line = 0;
+  GError *error;
+  char *report;
   int i;
 
-  destroy_windows ();
-  create_windows ();
-
-  wattrset(titlebar_window, COLOR_PAIR(UT_HEADER_COLOR));
-  wbkgd(titlebar_window, COLOR_PAIR(UT_HEADER_COLOR));
-  werase(titlebar_window);
-  mvwprintw (titlebar_window, 0, 0, "     UProfTool version %s", VERSION);
-
-  wattrset(message_window, COLOR_PAIR(UT_WARNING_COLOR));
-  wbkgd(message_window, COLOR_PAIR(UT_WARNING_COLOR));
-  werase(message_window);
-
   error = NULL;
-  report = uprof_dbus_get_text_report (arg_bus_name, arg_report_name, &error);
+  report = uprof_report_proxy_get_text_report (report_proxy, &error);
   if (!report)
     {
       mvwprintw (message_window, message_line++, 0,
@@ -191,7 +221,7 @@ update_window_cb (void *data)
     }
 
   error = NULL;
-  if (!uprof_dbus_reset_report (arg_bus_name, arg_report_name, &error))
+  if (!uprof_report_proxy_reset (report_proxy, &error))
     {
       mvwprintw (message_window, message_line++, 0,
                  "Failed to zero report statistics: %s",
@@ -205,6 +235,42 @@ update_window_cb (void *data)
   wmove (keys_window, 0, 1);
   for (i = 0; i < G_N_ELEMENTS (keys); i++)
     wprintw (keys_window, "%s", keys[i].desc);
+}
+
+static void
+print_trace_messages_page (void)
+{
+  werase(main_window);
+
+}
+
+gboolean
+update_window_cb (void *data)
+{
+  destroy_windows ();
+  create_windows ();
+
+  wattrset(titlebar_window, COLOR_PAIR(UT_HEADER_COLOR));
+  wbkgd(titlebar_window, COLOR_PAIR(UT_HEADER_COLOR));
+  werase(titlebar_window);
+  mvwprintw (titlebar_window, 0, 0,
+             "     UProfTool version %s       ← Page %d/%d →",
+             VERSION,
+             current_page, n_pages);
+
+  wattrset(message_window, COLOR_PAIR(UT_WARNING_COLOR));
+  wbkgd(message_window, COLOR_PAIR(UT_WARNING_COLOR));
+  werase(message_window);
+
+  switch (current_page)
+    {
+    case 0:
+      print_timers_counters_page ();
+      break;
+    case 1:
+      print_trace_messages_page ();
+      break;
+    }
 
   refresh ();
 
@@ -241,34 +307,77 @@ init_curses (void)
   g_atexit (deinit_curses);
 }
 
-gboolean
+static void
+ut_warning (UTWarnLevel level, const char *format, ...)
+{
+  va_list ap;
+  UTWarningEntry *entry;
+
+  if (g_queue_get_length (warning_queue) > UT_MAX_WARNING_COUNT)
+    {
+      entry = g_queue_pop_tail (warning_queue);
+      g_free (entry->warning);
+      g_slice_free (UTWarningEntry, entry);
+    }
+
+  entry = g_slice_new (UTWarningEntry);
+  entry->level = level;
+
+  va_start (ap, format);
+  entry->warning = g_strdup_vprintf (format, ap);
+  va_end (ap);
+
+  g_queue_push_head (warning_queue, entry);
+}
+
+static gboolean
 user_input_cb (GIOChannel *channel,
                GIOCondition condition,
                void *user_data)
 {
-#if 0
-  GError *error = NULL;
-  char character;
-
-  while (status = g_io_channel_read_chars (channel,
-                                           &character,
-                                           1,
-                                           &read,
-                                           &error)
-         == G_IO_STATUS_AGAIN)
-    ;
-
-  if (status == G_IO_STATUS_ERROR)
-    g_critical ("Failed to read user input: %s", error->message);
-
-  if (status == G_IO_STATUS_NORMAL)
-    {
-      if (
-    }
-#endif
   int key = wgetch (stdscr);
+  int prev_page = current_page;
+
   if (key == 'q')
     g_main_loop_quit (mainloop);
+
+  if (key == KEY_RIGHT && current_page < (n_pages - 1))
+    current_page++;
+
+  if (key == KEY_LEFT && current_page > 0)
+    current_page--;
+
+  if (prev_page != current_page)
+    {
+      GError *error = NULL;
+
+      if (current_page == 1)
+        {
+          if (!uprof_report_proxy_enable_trace_messages (report_proxy,
+                                                         NULL,
+                                                         &error))
+            {
+              ut_warning (UT_WARN_LEVEL_HIGH, "Failed to enable tracing: %s",
+                          error->message);
+              g_error_free (error);
+            }
+          else
+            trace_enabled = TRUE;
+        }
+      else
+        {
+          if (uprof_report_proxy_disable_trace_messages (report_proxy,
+                                                         NULL,
+                                                         &error))
+            {
+              ut_warning (UT_WARN_LEVEL_HIGH, "Failed to disable tracing: %s",
+                          error->message);
+              g_error_free (error);
+            }
+          else
+            trace_enabled = FALSE;
+        }
+    }
 
   return TRUE;
 }
@@ -280,10 +389,14 @@ main (int argc, char **argv)
   GOptionGroup *group;
   GError *error = NULL;
   GIOChannel *stdin_io_channel;
+  char *report_location;
 
-  setlocale(LC_ALL,"");
+  setlocale (LC_ALL,"");
 
   uprof_init (&argc, &argv);
+
+  g_print ("UProfTool %s\n", VERSION);
+  g_print ("License LGPLv2.1+: GNU Lesser GPL version 2.1 or later\n\n");
 
   context = g_option_context_new (NULL);
 
@@ -301,7 +414,7 @@ main (int argc, char **argv)
 #endif
   if (!g_option_context_parse (context, &argc, &argv, &error))
     {
-      g_error ("%s", error->message);
+      g_printerr ("%s\n", error->message);
       g_error_free (error);
       return 1;
     }
@@ -314,7 +427,8 @@ main (int argc, char **argv)
 
   if (!arg_report_name)
     {
-      g_warning ("You need to specify a report name if not passing -l/--list");
+      g_printerr ("You need to specify a report name if not "
+                  "passing -l/--list\n");
       return 1;
     }
 
@@ -340,13 +454,28 @@ main (int argc, char **argv)
 
       if (!arg_bus_name)
         {
-          g_warning ("Couldn't find a report with name \"%s\" on any bus",
-                     arg_report_name);
+          g_printerr ("Couldn't find a report with name \"%s\" on any bus",
+                      arg_report_name);
           return 1;
         }
     }
 
+  report_location = g_strdup_printf ("%s@%s", arg_report_name, arg_bus_name);
+  report_proxy = uprof_dbus_get_report_proxy (report_location,
+                                              &error);
+  if (!report_proxy)
+    {
+      g_printerr ("Failed to create a proxy object for report "
+                  "\"%s\" on bus \"%s\": %s\n",
+                  arg_report_name, arg_bus_name,
+                  error->message);
+      g_error_free (error);
+      return 1;
+    }
+
   init_curses ();
+
+  warning_queue = g_queue_new ();
 
   mainloop = g_main_loop_new (NULL, FALSE);
 

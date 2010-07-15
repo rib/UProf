@@ -28,6 +28,7 @@
 #include <uprof-timer-result.h>
 #include <uprof-report.h>
 #include <uprof-dbus.h>
+#include <uprof-report-proxy.h>
 
 #include <glib.h>
 

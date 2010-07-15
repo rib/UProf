@@ -10,7 +10,8 @@ public_h_source = \
 	uprof-timer.h \
 	uprof-timer-result.h \
 	uprof-report.h \
-	uprof-dbus.h
+	uprof-dbus.h \
+	uprof-report-proxy.h
 
 libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_SOURCES = \
 	uprof-private.h \
@@ -31,6 +32,7 @@ libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_SOURCES = \
 	uprof-report.c \
 	uprof-dbus-private.h \
 	uprof-dbus.c \
+	uprof-report-proxy.c \
 	uprof-marshal.c \
 	$(public_h_source)
 
@@ -54,7 +56,7 @@ libuprof_@UPROF_MAJOR_VERSION@_@UPROF_MINOR_VERSION@_la_CPPFLAGS = \
 if HAVE_NCURSES
 
 bin_PROGRAMS = uprof-tool
-uprof_tool_SOURCES = uprof-tool.c
+uprof_tool_SOURCES = uprof-tool.c uprof-marshal.c
 uprof_tool_LDFLAGS = @UPROF_DEP_LIBS@ -luprof-@UPROF_MAJOR_VERSION@.@UPROF_MINOR_VERSION@ -lncursesw
 uprof_tool_CFLAGS = @EXTRA_CFLAGS@ @UPROF_DEP_CFLAGS@
 uprof_tool_CPPFLAGS = @EXTRA_CPPFLAGS@
