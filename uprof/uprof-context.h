@@ -373,6 +373,11 @@ uprof_context_trace_message (UProfContext *context,
                              const char *format,
                              ...);
 
+void
+uprof_context_vtrace_message (UProfContext *context,
+                              const char *format,
+                              va_list ap);
+
 G_END_DECLS
 
 #endif /* _UPROF_CONTEXT_H_ */

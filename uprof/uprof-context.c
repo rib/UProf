@@ -517,7 +517,7 @@ _uprof_context_add_trace_message_callback (
   UProfContextTraceMessageFunc *func =
     g_slice_new (UProfContextTraceMessageFunc);
 
-  func->id = context->next_trace_message_callbacks_id++;
+  func->id = ++context->next_trace_message_callbacks_id;
   func->callback = callback;
   func->user_data = user_data;
 
@@ -547,17 +547,14 @@ _uprof_context_remove_trace_message_callback (UProfContext *context,
 }
 
 void
-uprof_context_trace_message (UProfContext *context,
-                             const char *format,
-                             ...)
+uprof_context_vtrace_message (UProfContext *context,
+                              const char *format,
+                              va_list ap)
 {
-  if (context->tracing_enabled && context->trace_message_callbacks)
+  if (context->trace_message_callbacks)
     {
-      va_list ap;
       char *message;
       GList *l;
-
-      va_start (ap, format);
 
       message = g_strdup_vprintf (format, ap);
       for (l = context->trace_message_callbacks; l; l = l->next)
@@ -566,8 +563,20 @@ uprof_context_trace_message (UProfContext *context,
           func->callback (context, message, func->user_data);
         }
       g_free (message);
-
-      va_end (ap);
     }
 }
+
+void
+uprof_context_trace_message (UProfContext *context,
+                             const char *format,
+                             ...)
+{
+  va_list ap;
+
+  va_start (ap, format);
+  uprof_context_vtrace_message (context, format, ap);
+  va_end (ap);
+}
+
+
 

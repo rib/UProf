@@ -30,7 +30,7 @@
 #include <ncursesw/ncurses.h>
 #include <locale.h>
 
-#define UPROF_MESSAGE_WIN_HEIGHT 3
+#define UT_MESSAGE_WIN_HEIGHT 3
 
 #define UT_DEFAULT_COLOR 0
 #define UT_HEADER_COLOR 1
@@ -46,15 +46,46 @@ typedef struct
 
 typedef enum
 {
-  UT_WARN_LEVEL_NORMAL,
-  UT_WARN_LEVEL_HIGH
-} UTWarnLevel;
+  UT_MESSAGE_EMPHASIS_0,
+  UT_MESSAGE_EMPHASIS_1
+} UTMessageEmphasis;
 
 typedef struct
 {
-  UTWarnLevel level;
-  char *warning;
-} UTWarningEntry;
+  UTMessageEmphasis emphasis;
+  GList *categories;
+  char *location;
+  char *message;
+  int count;
+} UTMessageEntry;
+
+typedef struct
+{
+  GQueue *queue;
+  int size;
+} UTMessageQueue;
+
+typedef struct
+{
+  UTMessageQueue *message_queue;
+  int height;
+
+  int scroll_pos;
+  int cursor_view_pos;
+  int cursor_queue_pos;
+
+  gboolean show_details;
+
+  int default_attributes;
+  int cursor_attributes;
+  chtype background;
+} UTMessageQueueView;
+
+typedef enum
+{
+  UT_WARN_LEVEL_NORMAL = UT_MESSAGE_EMPHASIS_0,
+  UT_WARN_LEVEL_HIGH = UT_MESSAGE_EMPHASIS_1
+} UTWarnLevel;
 
 static gboolean arg_list = FALSE;
 static gboolean arg_zero = FALSE;
@@ -66,22 +97,45 @@ static GMainLoop *mainloop;
 
 static UProfReportProxy *report_proxy;
 
-#define UT_MAX_WARNING_COUNT 3
-GQueue *warning_queue;
+static int queue_redraw_idle_id;
+
+static int get_report_timeout_id;
+static char *timers_counters_report;
+
+static int screen_width, screen_height;
 
 static WINDOW *titlebar_window;
+
 static WINDOW *main_window;
-static WINDOW *message_window;
+
+#define UT_MAX_WARNING_COUNT UT_MESSAGE_WIN_HEIGHT
+static int wait_for_idle_warnings;
+static WINDOW *warning_window;
+static UTMessageQueue *warning_queue;
+static UTMessageQueueView *warning_queue_view;
+static gboolean eating_warnings;
+
 static WINDOW *keys_window;
 
-static int n_pages = 2;
-static int current_page = 0;
+#define UT_TRACE_LOG_SIZE 10000
+static UTMessageQueue *trace_queue;
+static UTMessageQueueView *trace_queue_view;
 
-static gboolean trace_enabled = FALSE;
+typedef enum
+{
+  UT_PAGE_TIMERS_COUNTERS,
+  UT_PAGE_TRACE,
+  UT_PAGE_COUNT
+} UTPage;
+
+static int current_page = UT_PAGE_TIMERS_COUNTERS;
+static int trace_message_filter_id;
 
 static KeyHandler keys[] = {
   { 'q', 'Q', "Q - Quit" },
 };
+
+static void queue_redraw (void);
 
 static gboolean
 pre_parse_hook (GOptionContext  *context,
@@ -169,10 +223,10 @@ destroy_windows (void)
       main_window = NULL;
     }
 
-  if (message_window)
+  if (warning_window)
     {
-      delwin (message_window);
-      message_window = NULL;
+      delwin (warning_window);
+      warning_window = NULL;
     }
 
   if (keys_window)
@@ -182,99 +236,340 @@ destroy_windows (void)
     }
 }
 
-static void
-create_windows (void)
+static gboolean
+message_entry_equal (UTMessageEntry *entry,
+                     UTMessageEmphasis emphasis,
+                     GList *categories,
+                     const char *location,
+                     const char *message)
 {
-  int maxx, maxy;
-  getmaxyx (stdscr, maxy, maxx);
+  GList *l0;
+  GList *l1;
 
-  titlebar_window = subwin (stdscr, 1, maxx, 0, 0);
-  main_window = subwin (stdscr, maxy - UPROF_MESSAGE_WIN_HEIGHT - 1, maxx,
-                        1, 0);
-  message_window = subwin (stdscr, UPROF_MESSAGE_WIN_HEIGHT, maxx,
-                           maxy - UPROF_MESSAGE_WIN_HEIGHT - 1, 0);
-  keys_window = subwin (stdscr, 1, maxx, maxy - 1, 0);
+  if (!entry)
+    return FALSE;
+
+  if (strcmp (entry->message, message) != 0)
+    return FALSE;
+
+  if (strcmp (entry->location, location) != 0)
+    return FALSE;
+
+  for (l0 = entry->categories, l1 = categories;
+       l0 && l1;
+       l0 = l0->next, l1 = l1->next)
+    {
+      char *category0 = l0->data;
+      char *category1 = l1->data;
+      if (strcmp (category0, category1) != 0)
+        return FALSE;
+    }
+  if (l0 != NULL || l1 != NULL)
+    return FALSE;
+
+  return TRUE;
 }
 
-void
-print_timers_counters_page (void)
+static void
+ut_message_entry_free (UTMessageEntry *entry)
 {
-  int message_line = 0;
-  GError *error;
+  g_free (entry->message);
+  g_list_foreach (entry->categories, (GFunc)g_free, NULL);
+  g_list_free (entry->categories);
+  g_slice_free (UTMessageEntry, entry);
+}
+
+static void
+ut_message_queue_vappend (UTMessageQueue *message_queue,
+                          UTMessageEmphasis emphasis,
+                          GList *categories,
+                          const char *location,
+                          const char *format,
+                          va_list ap)
+{
+  char *message;
+  UTMessageEntry *entry;
+  UTMessageEntry *last;
+
+  message = g_strdup_vprintf (format, ap);
+
+  last = g_queue_peek_tail (message_queue->queue);
+  if (message_entry_equal (last, emphasis, categories, location, message))
+    last->count++;
+  else
+    {
+      if (g_queue_get_length (message_queue->queue) >= message_queue->size)
+        {
+          entry = g_queue_pop_head (message_queue->queue);
+          ut_message_entry_free (entry);
+        }
+
+      entry = g_slice_new (UTMessageEntry);
+      entry->emphasis = emphasis;
+      entry->categories = categories;
+      entry->location = g_strdup (location);
+      entry->message = message;
+      entry->count = 1;
+      g_queue_push_tail (message_queue->queue, entry);
+    }
+}
+
+/* XXX: Note we take over ownership of the given list of categories */
+static void
+ut_message_queue_append (UTMessageQueue *message_queue,
+                         UTMessageEmphasis emphasis,
+                         GList *categories,
+                         const char *location,
+                         const char *format, ...)
+{
+  va_list ap;
+
+  va_start (ap, format);
+
+  ut_message_queue_vappend (message_queue,
+                            emphasis,
+                            categories,
+                            location,
+                            format,
+                            ap);
+
+  va_end (ap);
+}
+
+UTMessageQueue *
+ut_message_queue_new (int size)
+{
+  UTMessageQueue *message_queue = g_slice_new0 (UTMessageQueue);
+  message_queue->queue = g_queue_new ();
+  message_queue->size = size;
+  return message_queue;
+}
+
+static gboolean
+eat_warning_cb (void *user_data)
+{
+  UTMessageEntry *entry = g_queue_pop_head (warning_queue->queue);
+  ut_message_entry_free (entry);
+
+  if (warning_queue->queue->head)
+    return TRUE;
+  else
+    {
+      eating_warnings = FALSE;
+      return FALSE;
+    }
+}
+
+static gboolean
+idle_warnings_cb (void *user_data)
+{
+  if (!eating_warnings)
+    {
+      g_timeout_add_seconds (2, eat_warning_cb, NULL);
+      eating_warnings = TRUE;
+    }
+  return FALSE;
+}
+
+static void
+ut_warning (UTWarnLevel level, const char *format, ...)
+{
+  va_list ap;
+
+  va_start (ap, format);
+
+  ut_message_queue_vappend (warning_queue,
+                            level,
+                            NULL,
+                            NULL,
+                            format,
+                            ap);
+
+  va_end (ap);
+
+  /* Restart the wait for idle warnings */
+  if (wait_for_idle_warnings)
+    g_source_remove (wait_for_idle_warnings);
+  wait_for_idle_warnings =
+    g_timeout_add_seconds (5, (GSourceFunc)idle_warnings_cb, NULL);
+}
+
+static void
+get_report_cb (void *user_data)
+{
   char *report;
-  int i;
+  GError *error;
 
   error = NULL;
   report = uprof_report_proxy_get_text_report (report_proxy, &error);
   if (!report)
     {
-      mvwprintw (message_window, message_line++, 0,
-                 "Failed to fetch report: %s",
-                 error->message);
+      ut_warning (UT_WARN_LEVEL_HIGH,
+                  "Failed to fetch report: %s", error->message);
       g_error_free (error);
-    }
-  else
-    {
-      werase(main_window);
-      mvwprintw (main_window, 0, 0, "%s", report);
-      g_free (report);
     }
 
   error = NULL;
   if (!uprof_report_proxy_reset (report_proxy, &error))
     {
-      mvwprintw (message_window, message_line++, 0,
-                 "Failed to zero report statistics: %s",
-                 error->message);
+      ut_warning (UT_WARN_LEVEL_HIGH,
+                  "Failed to zero report statistics: %s", error->message);
       g_error_free (error);
     }
 
-  wattrset(keys_window, COLOR_PAIR(UT_KEY_LABEL_COLOR));
-  wbkgd(keys_window, COLOR_PAIR(UT_KEY_LABEL_COLOR));
+  g_free (timers_counters_report);
+  timers_counters_report = report;
+  queue_redraw ();
+}
+
+static void
+keys_window_print (void)
+{
+  int i;
+
+  keys_window = subwin (stdscr, 1, screen_width, screen_height - 1, 0);
+
+  wattrset(keys_window, COLOR_PAIR (UT_KEY_LABEL_COLOR));
+  wbkgd(keys_window, COLOR_PAIR (UT_KEY_LABEL_COLOR));
   werase(keys_window);
   wmove (keys_window, 0, 1);
   for (i = 0; i < G_N_ELEMENTS (keys); i++)
     wprintw (keys_window, "%s", keys[i].desc);
 }
 
+void
+print_timers_counters_page (void)
+{
+  main_window = subwin (stdscr,
+                        screen_height - 2,
+                        screen_width,
+                        1, 0);
+
+  werase(main_window);
+  mvwprintw (main_window, 0, 0, "%s", timers_counters_report);
+
+  keys_window_print ();
+}
+
+static void
+ut_message_queue_view_set_height (UTMessageQueueView *view, int height)
+{
+  view->height = height;
+}
+
+static void
+ut_message_queue_view_print (UTMessageQueueView *view,
+                             WINDOW *window)
+{
+  GList *l;
+  GList *messages_tail = view->message_queue->queue->tail;
+  int i;
+
+  wattrset (window, view->default_attributes);
+  wbkgd (window, view->background);
+  werase (window);
+
+  for (l = messages_tail, i = 0;
+       l;
+       l = l->prev, i++)
+    {
+      UTMessageEntry *entry = l->data;
+      if (view->cursor_view_pos != -1)
+        {
+          if (i == view->cursor_view_pos)
+            {
+              wattrset (window, view->cursor_attributes);
+              /* TODO: update details window */
+            }
+          else if (i == (view->cursor_view_pos + 1))
+            wattrset (window, view->default_attributes);
+        }
+
+      mvwprintw (window, view->height - i, 0, "%s", entry->message);
+    }
+}
+
+UTMessageQueueView *
+ut_message_queue_view_new (UTMessageQueue *message_queue,
+                           chtype background,
+                           int default_attributes,
+                           int cursor_attributes)
+{
+  UTMessageQueueView *view = g_slice_new0 (UTMessageQueueView);
+  view->message_queue = message_queue;
+
+  ut_message_queue_view_set_height (view, 100);
+  view->cursor_view_pos = 5;
+
+  view->background = background;
+  view->default_attributes = default_attributes;
+  view->cursor_attributes = cursor_attributes;
+
+  return view;
+}
+
 static void
 print_trace_messages_page (void)
 {
-  werase(main_window);
+  int width = screen_width;
+  int height = screen_height - 4;
 
+  main_window = subwin (stdscr, height, width, 1, 0);
+
+  ut_message_queue_view_set_height (trace_queue_view, height);
+  ut_message_queue_view_print (trace_queue_view, main_window);
+
+  //message_window = subwin (stdscr, 2, width, height - 3, 0);
+
+  keys_window_print ();
 }
 
-gboolean
+static gboolean
 update_window_cb (void *data)
 {
-  destroy_windows ();
-  create_windows ();
+  queue_redraw_idle_id = 0;
 
-  wattrset(titlebar_window, COLOR_PAIR(UT_HEADER_COLOR));
-  wbkgd(titlebar_window, COLOR_PAIR(UT_HEADER_COLOR));
-  werase(titlebar_window);
+  destroy_windows ();
+
+  getmaxyx (stdscr, screen_height, screen_width);
+
+  titlebar_window = subwin (stdscr, 1, screen_width, 0, 0);
+
+  wattrset (titlebar_window, COLOR_PAIR (UT_HEADER_COLOR));
+  wbkgd (titlebar_window, COLOR_PAIR (UT_HEADER_COLOR));
+  werase (titlebar_window);
   mvwprintw (titlebar_window, 0, 0,
              "     UProfTool version %s       ← Page %d/%d →",
              VERSION,
-             current_page, n_pages);
-
-  wattrset(message_window, COLOR_PAIR(UT_WARNING_COLOR));
-  wbkgd(message_window, COLOR_PAIR(UT_WARNING_COLOR));
-  werase(message_window);
+             current_page, UT_PAGE_COUNT);
 
   switch (current_page)
     {
-    case 0:
+    case UT_PAGE_TIMERS_COUNTERS:
       print_timers_counters_page ();
       break;
-    case 1:
+    case UT_PAGE_TRACE:
       print_trace_messages_page ();
       break;
     }
 
+  if (warning_queue->queue->head)
+    {
+      warning_window = subwin (stdscr,
+                               UT_MESSAGE_WIN_HEIGHT,
+                               screen_width,
+                               screen_height - UT_MESSAGE_WIN_HEIGHT - 1,
+                               0);
+
+      ut_message_queue_view_set_height (warning_queue_view,
+                                        UT_MESSAGE_WIN_HEIGHT);
+      ut_message_queue_view_print (warning_queue_view,
+                                   warning_window);
+    }
+
   refresh ();
 
-  return TRUE;
+  return FALSE;
 }
 
 static void
@@ -287,47 +582,100 @@ static void
 init_curses (void)
 {
   initscr ();
-  nonl();
-  intrflush(stdscr, FALSE);
-  keypad(stdscr, TRUE); /* enable arrow keys etc */
+  nonl ();
+  intrflush (stdscr, FALSE);
+  keypad (stdscr, TRUE); /* enable arrow keys etc */
 
-  cbreak(); /* don't buffer input up to \n */
+  cbreak (); /* don't buffer input up to \n */
 
-  noecho();
-  curs_set(0); /* don't display the cursor */
+  noecho ();
+  curs_set (0); /* don't display the cursor */
 
-  start_color();
-  use_default_colors();
+  start_color ();
+  use_default_colors ();
 
-  init_pair(UT_DEFAULT_COLOR, COLOR_WHITE, COLOR_BLACK);
-  init_pair(UT_HEADER_COLOR, COLOR_WHITE, COLOR_GREEN);
-  init_pair(UT_WARNING_COLOR, COLOR_YELLOW, COLOR_BLACK);
-  init_pair(UT_KEY_LABEL_COLOR, COLOR_WHITE, COLOR_GREEN);
+  init_pair (UT_DEFAULT_COLOR, COLOR_WHITE, COLOR_BLACK);
+  init_pair (UT_HEADER_COLOR, COLOR_WHITE, COLOR_GREEN);
+  init_pair (UT_WARNING_COLOR, COLOR_YELLOW, COLOR_BLACK);
+  init_pair (UT_KEY_LABEL_COLOR, COLOR_WHITE, COLOR_GREEN);
 
   g_atexit (deinit_curses);
 }
 
 static void
-ut_warning (UTWarnLevel level, const char *format, ...)
+message_filter_cb (UProfReportProxy *proxy,
+                   const char *context,
+                   const char *categories,
+                   const char *location,
+                   const char *message,
+                   void *user_data)
 {
-  va_list ap;
-  UTWarningEntry *entry;
+  char **strv = g_strsplit (categories, ",", -1);
+  GList *categories_list = NULL;
+  int i;
 
-  if (g_queue_get_length (warning_queue) > UT_MAX_WARNING_COUNT)
+#if 0
+  for (i = 0; strv[i]; i++)
+    categories_list = g_list_prepend (categories_list,
+                                      g_strdup (g_strstrip (strv[i])));
+  g_strfreev (strv);
+#endif
+
+  ut_message_queue_append (trace_queue,
+                           UT_MESSAGE_EMPHASIS_0,
+                           categories_list,
+                           location,
+                           "%s", message);
+
+  if (current_page == UT_PAGE_TRACE)
+    queue_redraw ();
+}
+
+static void
+switch_to_timers_counters_page (void)
+{
+  get_report_timeout_id =
+    g_timeout_add_seconds (1, (GSourceFunc)get_report_cb, NULL);
+}
+
+static void
+switch_from_timers_counters_page (void)
+{
+  g_source_remove (get_report_timeout_id);
+}
+
+static void
+switch_to_trace_page (void)
+{
+  GError *error = NULL;
+  trace_message_filter_id =
+    uprof_report_proxy_add_trace_message_filter (report_proxy,
+                                                 NULL,
+                                                 message_filter_cb,
+                                                 NULL,
+                                                 &error);
+  if (!trace_message_filter_id)
     {
-      entry = g_queue_pop_tail (warning_queue);
-      g_free (entry->warning);
-      g_slice_free (UTWarningEntry, entry);
+      ut_warning (UT_WARN_LEVEL_HIGH, "Failed to enable tracing: %s",
+                  error->message);
+      g_error_free (error);
     }
+}
 
-  entry = g_slice_new (UTWarningEntry);
-  entry->level = level;
-
-  va_start (ap, format);
-  entry->warning = g_strdup_vprintf (format, ap);
-  va_end (ap);
-
-  g_queue_push_head (warning_queue, entry);
+static void
+switch_from_trace_page (void)
+{
+  GError *error = NULL;
+  if (trace_message_filter_id &&
+      !uprof_report_proxy_remove_trace_message_filter (
+                                                report_proxy,
+                                                trace_message_filter_id,
+                                                &error))
+    {
+      ut_warning (UT_WARN_LEVEL_HIGH, "Failed to disable tracing: %s",
+                  error->message);
+      g_error_free (error);
+    }
 }
 
 static gboolean
@@ -341,7 +689,7 @@ user_input_cb (GIOChannel *channel,
   if (key == 'q')
     g_main_loop_quit (mainloop);
 
-  if (key == KEY_RIGHT && current_page < (n_pages - 1))
+  if (key == KEY_RIGHT && current_page < (UT_PAGE_COUNT - 1))
     current_page++;
 
   if (key == KEY_LEFT && current_page > 0)
@@ -349,37 +697,52 @@ user_input_cb (GIOChannel *channel,
 
   if (prev_page != current_page)
     {
-      GError *error = NULL;
+      if (prev_page == UT_PAGE_TIMERS_COUNTERS)
+        switch_from_timers_counters_page ();
+      else if (prev_page == UT_PAGE_TRACE)
+        switch_from_trace_page ();
 
-      if (current_page == 1)
+      if (current_page == UT_PAGE_TIMERS_COUNTERS)
+        switch_to_timers_counters_page ();
+      else if (current_page == UT_PAGE_TRACE)
+        switch_to_trace_page ();
+    }
+
+  if (current_page == UT_PAGE_TRACE)
+    {
+      if (key == KEY_UP)
         {
-          if (!uprof_report_proxy_enable_trace_messages (report_proxy,
-                                                         NULL,
-                                                         &error))
+          trace_queue_view->cursor_view_pos++;
+          if (trace_queue_view->cursor_view_pos >= trace_queue_view->height)
             {
-              ut_warning (UT_WARN_LEVEL_HIGH, "Failed to enable tracing: %s",
-                          error->message);
-              g_error_free (error);
+              trace_queue_view->cursor_view_pos = trace_queue_view->height - 1;
+
+              trace_queue_view->scroll_pos++;
+              if (trace_queue_view->scroll_pos >=
+                  trace_queue_view->message_queue->size)
+                trace_queue_view->scroll_pos =
+                  trace_queue_view->message_queue->size - 1;
             }
-          else
-            trace_enabled = TRUE;
         }
-      else
+      else if (key == KEY_DOWN)
         {
-          if (uprof_report_proxy_disable_trace_messages (report_proxy,
-                                                         NULL,
-                                                         &error))
-            {
-              ut_warning (UT_WARN_LEVEL_HIGH, "Failed to disable tracing: %s",
-                          error->message);
-              g_error_free (error);
-            }
-          else
-            trace_enabled = FALSE;
+          trace_queue_view->cursor_view_pos--;
+          if (trace_queue_view->cursor_view_pos < -1)
+            trace_queue_view->cursor_view_pos = -1;
         }
     }
 
+  queue_redraw ();
+
   return TRUE;
+}
+
+static void
+queue_redraw (void)
+{
+  if (queue_redraw_idle_id == 0)
+    queue_redraw_idle_id =
+      g_idle_add ((GSourceFunc)update_window_cb, NULL);
 }
 
 int
@@ -454,7 +817,7 @@ main (int argc, char **argv)
 
       if (!arg_bus_name)
         {
-          g_printerr ("Couldn't find a report with name \"%s\" on any bus",
+          g_printerr ("Couldn't find a report with name \"%s\" on any bus\n",
                       arg_report_name);
           return 1;
         }
@@ -475,17 +838,33 @@ main (int argc, char **argv)
 
   init_curses ();
 
-  warning_queue = g_queue_new ();
+  warning_queue = ut_message_queue_new (UT_MAX_WARNING_COUNT);
+  warning_queue_view =
+    ut_message_queue_view_new (warning_queue,
+                               COLOR_PAIR (UT_WARNING_COLOR), /* background */
+                               COLOR_PAIR (UT_WARNING_COLOR), /* default */
+                               0); /* cursor */
+
+  trace_queue = ut_message_queue_new (UT_TRACE_LOG_SIZE);
+  trace_queue_view =
+    ut_message_queue_view_new (trace_queue,
+                               COLOR_PAIR (UT_DEFAULT_COLOR), /* background */
+                               COLOR_PAIR (UT_DEFAULT_COLOR), /* default */
+                               COLOR_PAIR (UT_WARNING_COLOR)); /* cursor */
 
   mainloop = g_main_loop_new (NULL, FALSE);
 
   stdin_io_channel = g_io_channel_unix_new (0);
-  g_io_add_watch (stdin_io_channel,
-                  G_IO_IN,
-                  user_input_cb,
-                  NULL);
+  g_io_add_watch_full (stdin_io_channel,
+                       G_PRIORITY_HIGH,
+                       G_IO_IN,
+                       user_input_cb,
+                       NULL,
+                       NULL);
 
-  g_timeout_add_seconds (1, update_window_cb, NULL);
+  switch_to_timers_counters_page ();
+
+  queue_redraw ();
 
   g_main_loop_run (mainloop);
 

@@ -30,11 +30,14 @@
 #include <uprof-private.h>
 #include <uprof-report-private.h>
 #include <uprof-service-private.h>
+#include <uprof-marshal.h>
+
+#include <glib.h>
+#include <dbus/dbus-glib.h>
 
 #include <stdio.h>
 #include <stdint.h>
 #include <time.h>
-#include <glib.h>
 #include <errno.h>
 #include <string.h>
 #include <glib/gprintf.h>
@@ -111,6 +114,12 @@ uprof_init_real (void)
 #endif
 
   mainloop_context = uprof_context_new ("Mainloop context");
+
+  dbus_g_object_register_marshaller (_uprof_marshal_VOID__STRING_STRING,
+                                     G_TYPE_NONE,
+                                     G_TYPE_STRING,
+                                     G_TYPE_STRING,
+                                     G_TYPE_INVALID);
 
   _uprof_report_register_dbus_type_info ();
   _uprof_service_register_dbus_type_info ();

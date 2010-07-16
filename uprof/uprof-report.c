@@ -40,7 +40,13 @@
 
 typedef struct
 {
+  /* By having a back reference to the report we can pass a
+   * UProfReportContextReference pointer as the private data
+   * for our trace message callbacks. */
+  UProfReport *report;
+
   UProfContext *context;
+  int tracing_enabled;
   int trace_messages_callback_id;
 } UProfReportContextReference;
 
@@ -305,7 +311,7 @@ uprof_report_class_init (UProfReportClass *klass)
                   0,
                   NULL, NULL,
                   _uprof_marshal_VOID__STRING_STRING,
-                  G_TYPE_NONE, 1, G_TYPE_STRING);
+                  G_TYPE_NONE, 2, G_TYPE_STRING, G_TYPE_STRING);
 }
 
 
@@ -356,11 +362,13 @@ context_trace_message_cb (UProfContext *context,
                           const char *message,
                           void *user_data)
 {
-  UProfReport *report = user_data;
+  UProfReportContextReference *ref = user_data;
+  UProfReport *report = ref->report;
 
-  g_signal_emit (report, signals[TRACE_MESSAGE], 0,
-                 context->name,
-                 message);
+  if (ref->tracing_enabled)
+    g_signal_emit (report, signals[TRACE_MESSAGE], 0,
+                   context->name,
+                   message);
 }
 
 void
@@ -371,10 +379,14 @@ uprof_report_add_context (UProfReport *report,
   UProfReportContextReference *ref = g_slice_new (UProfReportContextReference);
 
   ref->context = uprof_context_ref (context);
+  /* This back reference is just for the convenience of being able to
+   * pass a ref as the private data for our trace message callback... */
+  ref->report = report;
+  ref->tracing_enabled = 0;
   ref->trace_messages_callback_id =
     _uprof_context_add_trace_message_callback (context,
                                                context_trace_message_cb,
-                                               report);
+                                               ref);
 
   priv->contexts = g_list_prepend (priv->contexts, ref);
 }
@@ -1657,7 +1669,10 @@ generate_uprof_report (UProfReport *report)
   void *closure;
 
   for (l = priv->contexts; l; l = l->next)
-    uprof_context_resolve_timer_heirachy (l->data);
+    {
+      UProfReportContextReference *ref = l->data;
+      uprof_context_resolve_timer_heirachy (ref->context);
+    }
 
   if (priv->init_callback &&
       !priv->init_callback (report,
@@ -1668,7 +1683,10 @@ generate_uprof_report (UProfReport *report)
   append_report_statistics (buf, report);
 
   for (l = priv->contexts; l; l = l->next)
-    append_context_report (buf, report, l->data);
+    {
+      UProfReportContextReference *ref = l->data;
+      append_context_report (buf, report, ref->context);
+    }
 
   if (priv->fini_callback)
     priv->fini_callback (report,
@@ -1701,8 +1719,8 @@ _uprof_report_reset (UProfReport *report, GError **error)
 
   for (l = priv->contexts; l; l = l->next)
     {
-      UProfContext *context = l->data;
-      _uprof_context_for_self_and_links_recursive (context,
+      UProfReportContextReference *ref = l->data;
+      _uprof_context_for_self_and_links_recursive (ref->context,
                                                    reset_context_cb,
                                                    NULL);
     }
@@ -1735,22 +1753,19 @@ find_context_reference (UProfReport *report, const char *name)
 
 static void
 foreach_context (UProfReport *report,
-                 void (*callback) (UProfContext *context))
+                 void (*callback) (UProfReportContextReference *ref))
 {
   UProfReportPrivate *priv = report->priv;
   GList *l;
 
   for (l = priv->contexts; l; l = l->next)
-    {
-      UProfReportContextReference *ref = l->data;
-      callback (ref->context);
-    }
+    callback (l->data);
 }
 
 static void
-inc_tracing_enabled_cb (UProfContext *context)
+inc_tracing_enabled_cb (UProfReportContextReference *ref)
 {
-  context->tracing_enabled++;
+  ref->tracing_enabled++;
 }
 
 gboolean
@@ -1761,12 +1776,15 @@ _uprof_report_enable_trace_messages (UProfReport *report,
   UProfReportPrivate *priv = report->priv;
   UProfReportContextReference *ref;
 
+  if (strcmp (context, "") == 0)
+    context = NULL;
+
   if (context)
     {
       ref = find_context_reference (report, context);
       if (ref)
         {
-          ref->context->tracing_enabled++;
+          ref->tracing_enabled++;
           return TRUE;
         }
       else
@@ -1782,16 +1800,19 @@ _uprof_report_enable_trace_messages (UProfReport *report,
         }
     }
   else
-    foreach_context (report, inc_tracing_enabled_cb);
+    {
+      foreach_context (report, inc_tracing_enabled_cb);
+      return TRUE;
+    }
 
   return FALSE;
 }
 
 static void
-dec_tracing_enabled_cb (UProfContext *context)
+dec_tracing_enabled_cb (UProfReportContextReference *ref)
 {
-  g_return_if_fail (context->tracing_enabled <= 0);
-  context->tracing_enabled--;
+  g_return_if_fail (ref->tracing_enabled > 0);
+  ref->tracing_enabled--;
 }
 
 gboolean
@@ -1802,12 +1823,15 @@ _uprof_report_disable_trace_messages (UProfReport *report,
   UProfReportPrivate *priv = report->priv;
   UProfReportContextReference *ref;
 
+  if (strcmp (context, "") == 0)
+    context = NULL;
+
   if (context)
     {
       ref = find_context_reference (report, context);
       if (ref)
         {
-          dec_tracing_enabled_cb (ref->context);
+          dec_tracing_enabled_cb (ref);
           return TRUE;
         }
       else
@@ -1823,7 +1847,10 @@ _uprof_report_disable_trace_messages (UProfReport *report,
         }
     }
   else
-    foreach_context (report, dec_tracing_enabled_cb);
+    {
+      foreach_context (report, dec_tracing_enabled_cb);
+      return TRUE;
+    }
 
   return FALSE;
 }

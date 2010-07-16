@@ -47,15 +47,24 @@ gboolean
 uprof_report_proxy_reset (UProfReportProxy *proxy,
                           GError **error);
 
-gboolean
-uprof_report_proxy_enable_trace_messages (UProfReportProxy *proxy,
-                                          const char *context_name,
-                                          GError **error);
+typedef void (*UProfReportProxyTraceMessageFilter) (UProfReportProxy *proxy,
+                                                    const char *context,
+                                                    const char *categories,
+                                                    const char *location,
+                                                    const char *message,
+                                                    void *user_data);
+int
+uprof_report_proxy_add_trace_message_filter (
+                                     UProfReportProxy *proxy,
+                                     const char *context,
+                                     UProfReportProxyTraceMessageFilter filter,
+                                     void *user_data,
+                                     GError **error);
 
 gboolean
-uprof_report_proxy_disable_trace_messages (UProfReportProxy *proxy,
-                                           const char *context_name,
-                                           GError **error);
+uprof_report_proxy_remove_trace_message_filter (UProfReportProxy *proxy,
+                                                int id,
+                                                GError **error);
 
 G_END_DECLS
 

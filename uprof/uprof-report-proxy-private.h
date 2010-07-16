@@ -34,6 +34,9 @@ struct _UProfReportProxy
   DBusGProxy *dbus_g_proxy;
 
   gboolean destroyed;
+
+  int next_trace_message_filter_id;
+  GList *trace_message_filters;
 };
 
 UProfReportProxy *

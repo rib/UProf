@@ -28,6 +28,14 @@
 #include <glib/gprintf.h>
 #include <string.h>
 
+typedef struct
+{
+  int id;
+  char *context;
+  UProfReportProxyTraceMessageFilter filter;
+  void *user_data;
+} UProfReportProxyTraceMessageFilterData;
+
 static void
 on_destroy (DBusGProxy *dbus_g_proxy, void *user_data)
 {
@@ -36,18 +44,66 @@ on_destroy (DBusGProxy *dbus_g_proxy, void *user_data)
   proxy->destroyed = TRUE;
 }
 
+static void
+trace_message_cb (DBusGProxy *dbus_g_proxy,
+                  const char *context,
+                  const char *message,
+                  void *user_data)
+{
+  UProfReportProxy *proxy = user_data;
+  GList *l;
+
+  for (l = proxy->trace_message_filters; l; l = l->next)
+    {
+      UProfReportProxyTraceMessageFilterData *data = l->data;
+      char *categories_start = strchr (message, '[');
+      char *categories_end = strchr (categories_start, ']');
+      char *location_end = strchr (categories_end, '&');
+
+      if (!categories_start)
+        {
+          g_warning ("Failed to parse trace message: %s",
+                     message);
+          continue;
+        }
+      *categories_end = '\0';
+
+      if (!location_end)
+        {
+          g_warning ("Failed to parse trace message: %s",
+                     message);
+          continue;
+        }
+      *location_end = '\0';
+
+      data->filter (proxy,
+                    context,
+                    categories_start + 1, /* "category0,category1\0" */
+                    categories_end + 1, /* " filename:line:function\0" */
+                    location_end + 1,
+                    data->user_data);
+    }
+}
+
 UProfReportProxy *
 _uprof_report_proxy_new (const char *bus_name,
                          const char *report_name,
                          DBusGProxy *dbus_g_proxy)
 {
-  UProfReportProxy *proxy = g_slice_new (UProfReportProxy);
+  UProfReportProxy *proxy = g_slice_new0 (UProfReportProxy);
 
   proxy->bus_name = g_strdup (bus_name);
   proxy->report_name = g_strdup (report_name);
   proxy->dbus_g_proxy = dbus_g_proxy;
 
   g_signal_connect (dbus_g_proxy, "destroy", (GCallback)on_destroy, proxy);
+
+  dbus_g_proxy_add_signal (dbus_g_proxy, "TraceMessage",
+                           G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INVALID);
+
+  dbus_g_proxy_connect_signal (dbus_g_proxy, "TraceMessage",
+                               G_CALLBACK (trace_message_cb),
+                               proxy, NULL);
 
   return proxy;
 }
@@ -125,42 +181,95 @@ uprof_report_proxy_reset (UProfReportProxy *proxy,
   return TRUE;
 }
 
-gboolean
-uprof_report_proxy_enable_trace_messages (UProfReportProxy *proxy,
-                                          const char *context_name,
-                                          GError **error)
+int
+uprof_report_proxy_add_trace_message_filter (
+                                     UProfReportProxy *proxy,
+                                     const char *context,
+                                     UProfReportProxyTraceMessageFilter filter,
+                                     void *user_data,
+                                     GError **error)
 {
-  if (lost_connection (proxy, error))
-    return FALSE;
+  UProfReportProxyTraceMessageFilterData *data;
 
-  if (!dbus_g_proxy_call_with_timeout (proxy->dbus_g_proxy,
-                                       "EnableTraceMessages",
-                                       1000,
-                                       error,
-                                       G_TYPE_INVALID,
-                                       G_TYPE_STRING, &context_name,
-                                       G_TYPE_INVALID))
-    return FALSE;
+  if (proxy->trace_message_filters == NULL)
+    {
+      /* NULL matches all contexts so we use that for simplicity */
+      char *context_name = NULL;
 
-  return TRUE;
+      if (lost_connection (proxy, error))
+        return 0;
+
+      if (!dbus_g_proxy_call_with_timeout (proxy->dbus_g_proxy,
+                                           "EnableTraceMessages",
+                                           1000,
+                                           error,
+                                           G_TYPE_STRING, &context_name,
+                                           G_TYPE_INVALID,
+                                           G_TYPE_INVALID))
+        return 0;
+    }
+
+  data = g_slice_new (UProfReportProxyTraceMessageFilterData);
+
+  data->id = ++proxy->next_trace_message_filter_id;
+  data->context = g_strdup (context);
+  data->filter = filter;
+  data->user_data = user_data;
+
+  proxy->trace_message_filters =
+    g_list_prepend (proxy->trace_message_filters, data);
+
+  return data->id;
+}
+
+static UProfReportProxyTraceMessageFilterData *
+remove_trace_message_filter_data (UProfReportProxy *proxy, int id)
+{
+  GList *l;
+
+  for (l = proxy->trace_message_filters; l; l = l->next)
+    {
+      UProfReportProxyTraceMessageFilterData *data = l->data;
+      if (data->id == id)
+        {
+          proxy->trace_message_filters =
+            g_list_delete_link (proxy->trace_message_filters, l);
+          return data;
+        }
+    }
+  return NULL;
 }
 
 gboolean
-uprof_report_proxy_disable_trace_messages (UProfReportProxy *proxy,
-                                           const char *context_name,
-                                           GError **error)
+uprof_report_proxy_remove_trace_message_filter (UProfReportProxy *proxy,
+                                                int id,
+                                                GError **error)
 {
-  if (lost_connection (proxy, error))
-    return FALSE;
+  UProfReportProxyTraceMessageFilterData *data =
+    remove_trace_message_filter_data (proxy, id);
 
-  if (!dbus_g_proxy_call_with_timeout (proxy->dbus_g_proxy,
-                                       "DisableTraceMessages",
-                                       1000,
-                                       error,
-                                       G_TYPE_INVALID,
-                                       G_TYPE_STRING, &context_name,
-                                       G_TYPE_INVALID))
-    return FALSE;
+  g_return_val_if_fail (data != NULL, TRUE);
+
+  g_free (data->context);
+  g_slice_free (UProfReportProxyTraceMessageFilterData, data);
+
+  if (proxy->trace_message_filters == NULL)
+    {
+      /* NULL matches all contexts so we use that for simplicity */
+      char *context_name = NULL;
+
+      if (lost_connection (proxy, error))
+        return FALSE;
+
+      if (!dbus_g_proxy_call_with_timeout (proxy->dbus_g_proxy,
+                                           "DisableTraceMessages",
+                                           1000,
+                                           error,
+                                           G_TYPE_STRING, &context_name,
+                                           G_TYPE_INVALID,
+                                           G_TYPE_INVALID))
+        return FALSE;
+    }
 
   return TRUE;
 }

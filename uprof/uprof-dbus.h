@@ -23,7 +23,7 @@
 
 #include <glib.h>
 
-#include <uprof/uprof-report-proxy.h>
+#include <uprof-report-proxy.h>
 
 G_BEGIN_DECLS
 
