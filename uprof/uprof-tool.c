@@ -87,6 +87,26 @@ typedef enum
   UT_WARN_LEVEL_HIGH = UT_MESSAGE_EMPHASIS_1
 } UTWarnLevel;
 
+typedef enum
+{
+  UT_OPTION_TYPE_BOOLEAN
+} UTOptionType;
+
+typedef struct
+{
+  UTOptionType type;
+  char *context;
+  char *name;
+  char *name_formatted;
+  char *description;
+  gboolean known_value;
+  union
+    {
+      gboolean boolean_value;
+    };
+} UTOption;
+
+
 static gboolean arg_list = FALSE;
 static gboolean arg_zero = FALSE;
 static char *arg_bus_name = NULL;
@@ -96,6 +116,8 @@ static char **arg_remaining = NULL;
 static GMainLoop *mainloop;
 
 static UProfReportProxy *report_proxy;
+
+static GList *options_list;
 
 static int queue_redraw_idle_id;
 
@@ -121,10 +143,14 @@ static WINDOW *keys_window;
 static UTMessageQueue *trace_queue;
 static UTMessageQueueView *trace_queue_view;
 
+static WINDOW *details_window;
+
 typedef enum
 {
   UT_PAGE_TIMERS_COUNTERS,
+  UT_PAGE_OPTIONS,
   UT_PAGE_TRACE,
+
   UT_PAGE_COUNT
 } UTPage;
 
@@ -234,6 +260,13 @@ destroy_windows (void)
       delwin (keys_window);
       keys_window = NULL;
     }
+
+  if (details_window)
+    {
+      delwin (details_window);
+      details_window = NULL;
+    }
+
 }
 
 static gboolean
@@ -519,10 +552,51 @@ print_trace_messages_page (void)
   ut_message_queue_view_set_height (trace_queue_view, height);
   ut_message_queue_view_print (trace_queue_view, main_window);
 
-  //message_window = subwin (stdscr, 2, width, height - 3, 0);
+  details_window = subwin (stdscr, 2, width, height - 3, 0);
 
   keys_window_print ();
 }
+
+static void
+print_options_page (void)
+{
+  int width = screen_width;
+  int height = screen_height - 2;
+  GList *l;
+  int i;
+
+  main_window = subwin (stdscr, height, width, 1, 0);
+  werase (main_window);
+
+  for (l = options_list, i = 0;
+       l;
+       l = l->next, i++)
+    {
+      UTOption *option = l->data;
+      gboolean value;
+      GError *error = NULL;
+
+      if (!uprof_report_proxy_get_boolean_option (report_proxy,
+                                                  option->context,
+                                                  option->name,
+                                                  &value,
+                                                  &error))
+        {
+          ut_warning (UT_WARN_LEVEL_HIGH,
+                      "Failed to get option \"%s\" value: %s",
+                      option->name,
+                      error->message);
+          g_error_free (error);
+        }
+
+      mvwprintw (main_window, i, 0, "%30s: %d",
+                 option->name_formatted,
+                 value);
+    }
+
+  keys_window_print ();
+}
+
 
 static gboolean
 update_window_cb (void *data)
@@ -547,6 +621,9 @@ update_window_cb (void *data)
     {
     case UT_PAGE_TIMERS_COUNTERS:
       print_timers_counters_page ();
+      break;
+    case UT_PAGE_OPTIONS:
+      print_options_page ();
       break;
     case UT_PAGE_TRACE:
       print_trace_messages_page ();
@@ -614,12 +691,10 @@ message_filter_cb (UProfReportProxy *proxy,
   GList *categories_list = NULL;
   int i;
 
-#if 0
   for (i = 0; strv[i]; i++)
     categories_list = g_list_prepend (categories_list,
                                       g_strdup (g_strstrip (strv[i])));
   g_strfreev (strv);
-#endif
 
   ut_message_queue_append (trace_queue,
                            UT_MESSAGE_EMPHASIS_0,
@@ -745,6 +820,43 @@ queue_redraw (void)
       g_idle_add ((GSourceFunc)update_window_cb, NULL);
 }
 
+static gboolean
+add_option_cb (UProfReportProxy *proxy,
+               const char *context,
+               UProfReportProxyOption *proxy_option,
+               void *user_data)
+{
+  GList **options_list = user_data;
+  UTOption *option = g_slice_new (UTOption);
+
+  option->type = UT_OPTION_TYPE_BOOLEAN;
+  option->context = g_strdup (proxy_option->context);
+  option->name = g_strdup (proxy_option->name);
+  option->name_formatted = g_strdup (proxy_option->name_formatted);
+  option->description = g_strdup (proxy_option->description);
+  option->known_value = FALSE;
+  option->boolean_value = FALSE;
+
+  *options_list = g_list_prepend (*options_list, option);
+  return TRUE;
+}
+
+static void
+free_options (GList *options)
+{
+  GList *l;
+  for (l = options; l; l = l->next)
+    {
+      UTOption *option = l->data;
+      g_free (option->context);
+      g_free (option->name);
+      g_free (option->name_formatted);
+      g_free (option->description);
+      g_slice_free (UTOption, option);
+    }
+  g_list_free (options);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -836,6 +948,18 @@ main (int argc, char **argv)
       return 1;
     }
 
+  if (!uprof_report_proxy_foreach_option (report_proxy,
+                                          NULL, /* all contexts */
+                                          add_option_cb,
+                                          &options_list,
+                                          &error))
+    {
+      g_printerr ("Failed to fetch list of options: %s\n",
+                  error->message);
+      g_error_free (error);
+      return 1;
+    }
+
   init_curses ();
 
   warning_queue = ut_message_queue_new (UT_MAX_WARNING_COUNT);
@@ -869,6 +993,8 @@ main (int argc, char **argv)
   g_main_loop_run (mainloop);
 
   g_io_channel_unref (stdin_io_channel);
+
+  free_options (options_list);
 
   return 0;
 }

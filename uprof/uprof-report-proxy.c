@@ -203,7 +203,7 @@ uprof_report_proxy_add_trace_message_filter (
                                            "EnableTraceMessages",
                                            1000,
                                            error,
-                                           G_TYPE_STRING, &context_name,
+                                           G_TYPE_STRING, context_name,
                                            G_TYPE_INVALID,
                                            G_TYPE_INVALID))
         return 0;
@@ -265,11 +265,174 @@ uprof_report_proxy_remove_trace_message_filter (UProfReportProxy *proxy,
                                            "DisableTraceMessages",
                                            1000,
                                            error,
-                                           G_TYPE_STRING, &context_name,
+                                           G_TYPE_STRING, context_name,
                                            G_TYPE_INVALID,
                                            G_TYPE_INVALID))
         return FALSE;
     }
+
+  return TRUE;
+}
+
+void
+option_tag_start_cb (GMarkupParseContext *context,
+                     const char *element_name,
+                     const char **attribute_names,
+                     const char **attribute_values,
+                     void *user_data,
+                     GError **error)
+{
+  GList **options = user_data;
+  UProfReportProxyOption *option = g_slice_new (UProfReportProxyOption);
+
+  int i;
+
+  for (i = 0; attribute_names[i]; i++)
+    {
+      if (strcmp (attribute_names[i], "context") == 0)
+        option->context = g_strdup (attribute_values[i]);
+      else if (strcmp (attribute_names[i], "type") == 0)
+        {
+          if (strcmp (attribute_values[i], "boolean") != 0)
+            goto error;
+        }
+      else if (strcmp (attribute_names[i], "name") == 0)
+        option->name = g_strdup (attribute_values[i]);
+      else if (strcmp (attribute_names[i], "name_formatted") == 0)
+        option->name_formatted = g_strdup (attribute_values[i]);
+      else if (strcmp (attribute_names[i], "description") == 0)
+        option->description = g_strdup (attribute_values[i]);
+    }
+
+  *options = g_list_prepend (*options, option);
+
+  return;
+error:
+  g_slice_free (UProfReportProxyOption, option);
+  g_set_error (error,
+               G_MARKUP_ERROR,
+               G_MARKUP_ERROR_INVALID_CONTENT,
+               "Failed to parse an options list");
+}
+
+static void
+option_tags_error_cb (GMarkupParseContext *context,
+                      GError *error,
+                      void *user_data)
+{
+
+}
+
+gboolean
+uprof_report_proxy_foreach_option (UProfReportProxy *proxy,
+                                   const char *context,
+                                   UProfReportProxyOptionCallback callback,
+                                   void *user_data,
+                                   GError **error)
+{
+  char *options_xml;
+  GMarkupParser parser;
+  GMarkupParseContext *markup_context;
+  GList *options = NULL;
+  GList *l;
+  gboolean cont;
+
+  if (lost_connection (proxy, error))
+    return FALSE;
+
+  g_print ("uprof_report_proxy_foreach_option\n");
+
+  if (!dbus_g_proxy_call_with_timeout (proxy->dbus_g_proxy,
+                                       "ListOptions",
+                                       1000,
+                                       error,
+                                       G_TYPE_STRING, context,
+                                       G_TYPE_INVALID,
+                                       G_TYPE_STRING, &options_xml,
+                                       G_TYPE_INVALID))
+    return FALSE;
+
+  g_print ("%s\n", options_xml);
+
+  parser.start_element = option_tag_start_cb;
+  parser.end_element = NULL;
+  parser.text = NULL;
+  parser.passthrough = NULL;
+  parser.error = option_tags_error_cb;
+
+  markup_context = g_markup_parse_context_new (&parser, 0, &options, NULL);
+  if (!g_markup_parse_context_parse (markup_context,
+                                     options_xml,
+                                     strlen (options_xml),
+                                     error))
+    return FALSE;
+
+  for (l = options, cont = TRUE;
+       l && cont;
+       l = l->next)
+    {
+      UProfReportProxyOption *option = l->data;
+
+      cont = callback (proxy, context, option, user_data);
+      g_free (option->context);
+      g_free (option->name);
+      g_free (option->name_formatted);
+      g_free (option->description);
+      g_slice_free (UProfReportProxyOption, option);
+    }
+  g_list_free (options);
+
+  g_markup_parse_context_free (markup_context);
+
+  g_free (options_xml);
+
+  return TRUE;
+}
+
+gboolean
+uprof_report_proxy_get_boolean_option (UProfReportProxy *proxy,
+                                       const char *context,
+                                       const char *name,
+                                       gboolean *value,
+                                       GError **error)
+{
+  if (lost_connection (proxy, error))
+    return FALSE;
+
+  if (!dbus_g_proxy_call_with_timeout (proxy->dbus_g_proxy,
+                                       "GetBooleanOption",
+                                       1000,
+                                       error,
+                                       G_TYPE_STRING, context,
+                                       G_TYPE_STRING, name,
+                                       G_TYPE_INVALID,
+                                       G_TYPE_BOOLEAN, value,
+                                       G_TYPE_INVALID))
+    return FALSE;
+
+  return TRUE;
+}
+
+gboolean
+uprof_report_proxy_set_boolean_option (UProfReportProxy *proxy,
+                                       const char *context,
+                                       const char *name,
+                                       gboolean value,
+                                       GError **error)
+{
+  if (lost_connection (proxy, error))
+    return FALSE;
+
+  if (!dbus_g_proxy_call_with_timeout (proxy->dbus_g_proxy,
+                                       "SetBooleanOption",
+                                       1000,
+                                       error,
+                                       G_TYPE_STRING, context,
+                                       G_TYPE_STRING, name,
+                                       G_TYPE_BOOLEAN, value,
+                                       G_TYPE_INVALID,
+                                       G_TYPE_INVALID))
+    return FALSE;
 
   return TRUE;
 }

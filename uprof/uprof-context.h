@@ -378,6 +378,46 @@ uprof_context_vtrace_message (UProfContext *context,
                               const char *format,
                               va_list ap);
 
+typedef gboolean (*UProfContextBooleanOptionGetter) (void *user_data);
+
+typedef void (*UProfContextBooleanOptionSetter) (gboolean value,
+                                                 void *user_data);
+
+/**
+ * UPROF_CONTEXT_ERROR:
+ *
+ * #GError domain for the uprof context API
+ *
+ * Since: 0.4
+ */
+#define UPROF_CONTEXT_ERROR (uprof_context_error_quark ())
+
+/**
+ * UProfContextError:
+ * @UPROF_CONTEXT_ERROR_BAD_OPTION: Given context name could not be found or
+ *                                  has a mismatching type.
+ *
+ * Error enumeration for the uprof context API.
+ *
+ * Since: 0.4
+ */
+typedef enum { /*< prefix=UPROF_CONTEXT_ERROR >*/
+  UPROF_CONTEXT_ERROR_BAD_OPTION,
+} UProfContextError;
+
+GQuark
+uprof_context_error_quark (void);
+
+
+void
+uprof_context_add_boolean_option (UProfContext *context,
+                                  const char *name,
+                                  const char *name_formatted,
+                                  const char *description,
+                                  UProfContextBooleanOptionGetter getter,
+                                  UProfContextBooleanOptionSetter setter,
+                                  void *user_data);
+
 G_END_DECLS
 
 #endif /* _UPROF_CONTEXT_H_ */

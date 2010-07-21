@@ -24,6 +24,24 @@
       <arg type="s"/> <!-- message -->
     </signal>
 
+    <!-- retieve a list of tunable options -->
+    <method name="ListOptions">
+      <arg type="s" direction="in"/> <!-- context name -->
+      <arg type="s" direction="out"/> <!-- context name -->
+    </method>
+
+    <method name="GetBooleanOption">
+      <arg type="s" direction="in"/> <!-- context name -->
+      <arg type="s" direction="in"/> <!-- option name -->
+      <arg type="b" direction="out"/> <!-- value -->
+    </method>
+
+    <method name="SetBooleanOption">
+      <arg type="s" direction="in"/> <!-- context name -->
+      <arg type="s" direction="in"/> <!-- option name -->
+      <arg type="b" direction="in"/> <!-- value -->
+    </method>
+
   </interface>
 </node>
 

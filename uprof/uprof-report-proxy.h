@@ -66,6 +66,47 @@ uprof_report_proxy_remove_trace_message_filter (UProfReportProxy *proxy,
                                                 int id,
                                                 GError **error);
 
+typedef enum
+{
+  UPROF_REPORT_PROXY_OPTION_TYPE_BOOLEAN,
+} UProfReportProxyOptionType;
+
+typedef struct
+{
+  UProfReportProxyOptionType type;
+  char *context;
+  char *name;
+  char *name_formatted;
+  char *description;
+} UProfReportProxyOption;
+
+typedef gboolean (*UProfReportProxyOptionCallback) (
+                                               UProfReportProxy *proxy,
+                                               const char *context,
+                                               UProfReportProxyOption *option,
+                                               void *user_data);
+
+gboolean
+uprof_report_proxy_foreach_option (UProfReportProxy *proxy,
+                                   const char *context,
+                                   UProfReportProxyOptionCallback callback,
+                                   void *user_data,
+                                   GError **error);
+
+gboolean
+uprof_report_proxy_get_boolean_option (UProfReportProxy *proxy,
+                                       const char *context,
+                                       const char *name,
+                                       gboolean *value,
+                                       GError **error);
+
+gboolean
+uprof_report_proxy_set_boolean_option (UProfReportProxy *proxy,
+                                       const char *context,
+                                       const char *name,
+                                       gboolean value,
+                                       GError **error);
+
 G_END_DECLS
 
 #endif /* _UPROF_UPROF_REPORT_H_ */

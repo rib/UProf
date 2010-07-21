@@ -41,4 +41,24 @@ _uprof_report_disable_trace_messages (UProfReport *report,
                                       const char *context,
                                       GError **error);
 
+gboolean
+_uprof_report_list_options (UProfReport *report,
+                            const char *context,
+                            char **options,
+                            GError **error);
+
+gboolean
+_uprof_report_get_boolean_option (UProfReport *report,
+                                  const char *context,
+                                  const char *name,
+                                  gboolean *value,
+                                  GError **error);
+
+gboolean
+_uprof_report_set_boolean_option (UProfReport *report,
+                                  const char *context,
+                                  const char *name,
+                                  gboolean value,
+                                  GError **error);
+
 #endif /* _UPROF_REPORT_PRIVATE_H_ */

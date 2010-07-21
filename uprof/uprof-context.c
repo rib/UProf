@@ -32,6 +32,31 @@
 
 #include <string.h>
 
+typedef enum
+{
+  UPROF_CONTEXT_OPTION_TYPE_BOOLEAN,
+
+  UPROF_CONTEXT_OPTION_TYPE_COUNT
+} UProfContextOptionType;
+
+typedef struct
+{
+  UProfContextOptionType type;
+  char *name;
+  char *name_formatted;
+  char *description;
+  void *getter;
+  void *setter;
+  void *user_data;
+} UProfContextOption;
+
+GQuark
+uprof_context_error_quark (void)
+{
+  return g_quark_from_static_string ("uprof-context-error-quark");
+}
+
+
 UProfContext *
 uprof_context_new (const char *name)
 {
@@ -49,6 +74,21 @@ uprof_context_ref (UProfContext *context)
 {
   context->ref++;
   return context;
+}
+
+static void
+_uprof_context_free_options (UProfContext *context)
+{
+  GList *l;
+  for (l = context->options; l; l = l->next)
+    {
+      UProfContextOption *option = l->data;
+      g_free (option->name);
+      g_free (option->name_formatted);
+      g_free (option->description);
+      g_slice_free (UProfContextOption, option);
+    }
+  g_list_free (context->options);
 }
 
 void
@@ -84,6 +124,8 @@ uprof_context_unref (UProfContext *context)
       for (l = context->links; l != NULL; l = l->next)
         uprof_context_unref (l->data);
       g_list_free (context->links);
+
+      _uprof_context_free_options (context);
 
       _uprof_all_contexts = g_list_remove (_uprof_all_contexts, context);
       g_free (context);
@@ -578,5 +620,133 @@ uprof_context_trace_message (UProfContext *context,
   va_end (ap);
 }
 
+void
+uprof_context_add_boolean_option (UProfContext *context,
+                                  const char *name,
+                                  const char *name_formatted,
+                                  const char *description,
+                                  UProfContextBooleanOptionGetter getter,
+                                  UProfContextBooleanOptionSetter setter,
+                                  void *user_data)
+{
+  UProfContextOption *option = g_slice_new0 (UProfContextOption);
 
+  option->type = UPROF_CONTEXT_OPTION_TYPE_BOOLEAN;
+  option->name = g_strdup (name);
+  option->name_formatted = g_strdup (name_formatted);
+  option->description = g_strdup (description);
+  option->getter = getter;
+  option->setter = setter;
+  option->user_data = user_data;
+
+  context->options = g_list_prepend (context->options, option);
+}
+
+static UProfContextOption *
+find_option (UProfContext *context, const char *name)
+{
+  GList *l;
+  for (l = context->options; l; l = l->next)
+    {
+      UProfContextOption *option = l->data;
+      if (strcmp (option->name, name) == 0)
+        return option;
+    }
+  return NULL;
+}
+
+gboolean
+_uprof_context_get_boolean_option (UProfContext *context,
+                                   const char *name,
+                                   gboolean *value,
+                                   GError **error)
+{
+  UProfContextOption *option = find_option (context, name);
+  UProfContextBooleanOptionGetter getter;
+
+  if (!option || option->type != UPROF_CONTEXT_OPTION_TYPE_BOOLEAN)
+    {
+      g_set_error (error,
+                   UPROF_CONTEXT_ERROR,
+                   UPROF_CONTEXT_ERROR_BAD_OPTION,
+                   "Bad option name givem (\"%s\")", name);
+      return FALSE;
+    }
+
+  getter = option->getter;
+  *value = getter (option->user_data);
+  return TRUE;
+}
+
+gboolean
+_uprof_context_set_boolean_option (UProfContext *context,
+                                   const char *name,
+                                   gboolean value,
+                                   GError **error)
+{
+  UProfContextOption *option = find_option (context, name);
+  UProfContextBooleanOptionSetter setter;
+
+  if (!option || option->type != UPROF_CONTEXT_OPTION_TYPE_BOOLEAN)
+    {
+      g_set_error (error,
+                   UPROF_CONTEXT_ERROR,
+                   UPROF_CONTEXT_ERROR_BAD_OPTION,
+                   "Bad option name givem (\"%s\")", name);
+      return FALSE;
+    }
+
+  setter = option->setter;
+  setter (value, option->user_data);
+
+  return TRUE;
+}
+
+static const char *
+option_type_to_string (UProfContextOptionType type)
+{
+  static const char *names[UPROF_CONTEXT_OPTION_TYPE_COUNT] =
+    {
+      "boolean"
+    };
+
+  return names[type];
+}
+
+static void
+append_options_cb (UProfContext *context,
+                   void *user_data)
+{
+  GString *options_xml = user_data;
+  GList *l;
+
+  for (l = context->options; l; l = l->next)
+    {
+      UProfContextOption *option = l->data;
+      char *name_formatted_escaped = g_strescape (option->name_formatted, "");
+      char *description_escaped = g_strescape (option->description, "");
+      g_string_append_printf (options_xml,
+                              "<option context=\"%s\"\n"
+                              "        type=\"%s\"\n"
+                              "        name=\"%s\"\n"
+                              "        name_formatted=\"%s\"\n"
+                              "        description=\"%s\"/>\n",
+                              context->name,
+                              option_type_to_string (option->type),
+                              option->name,
+                              name_formatted_escaped,
+                              description_escaped);
+      g_free (name_formatted_escaped);
+      g_free (description_escaped);
+    }
+}
+
+void
+_uprof_context_append_options_xml (UProfContext *context,
+                                   GString *options_xml)
+{
+  _uprof_context_for_self_and_links_recursive (context,
+                                               append_options_cb,
+                                               options_xml);
+}
 

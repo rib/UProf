@@ -48,6 +48,8 @@ struct _UProfContext
   int tracing_enabled;
   GList *trace_message_callbacks;
   int next_trace_message_callbacks_id;
+
+  GList *options;
 };
 
 typedef void (*UProfContextCallback) (UProfContext *context,
@@ -74,6 +76,22 @@ _uprof_context_add_trace_message_callback (
 void
 _uprof_context_remove_trace_message_callback (UProfContext *context,
                                               int id);
+
+gboolean
+_uprof_context_get_boolean_option (UProfContext *context,
+                                   const char *name,
+                                   gboolean *value,
+                                   GError **error);
+
+gboolean
+_uprof_context_set_boolean_option (UProfContext *context,
+                                   const char *name,
+                                   gboolean value,
+                                   GError **error);
+
+void
+_uprof_context_append_options_xml (UProfContext *context,
+                                   GString *options_xml);
 
 #endif /* _UPROF_CONTEXT_PRIVATE_H_ */
 

@@ -109,7 +109,8 @@ struct _UProfReportPrivate
 {
   char *name;
 
-  GList *contexts;
+  GList *top_contexts;
+  GList *context_references;
 
   UProfReportInitCallback init_callback;
   UProfReportFiniCallback fini_callback;
@@ -271,12 +272,9 @@ uprof_report_finalize (GObject *object)
   g_list_foreach (priv->timer_attributes, (GFunc)free_attribute, NULL);
   g_list_foreach (priv->counter_attributes, (GFunc)free_attribute, NULL);
 
-  contexts = g_list_copy (priv->contexts);
-  for (l = priv->contexts; l; l = l->next)
-    {
-      UProfReportContextReference *ref = l->data;
-      uprof_report_remove_context (report, ref->context);
-    }
+  contexts = g_list_copy (priv->top_contexts);
+  for (l = priv->top_contexts; l; l = l->next)
+    uprof_report_remove_context (report, l->data);
   g_list_free (contexts);
 
   G_OBJECT_CLASS (uprof_report_parent_class)->finalize (object);
@@ -322,7 +320,8 @@ uprof_report_init (UProfReport *self)
 
   self->priv = priv = UPROF_REPORT_GET_PRIVATE (self);
 
-  priv->contexts = NULL;
+  priv->top_contexts = NULL;
+  priv->context_references = NULL;
 
   priv->statistics_groups = NULL;
   priv->timer_attributes = NULL;
@@ -371,24 +370,88 @@ context_trace_message_cb (UProfContext *context,
                    message);
 }
 
+static void
+add_context_to_list_cb (UProfContext *context,
+                        void *user_data)
+{
+  GList **references = user_data;
+
+  if (!g_list_find (*references, context))
+    *references = g_list_prepend (*references, context);
+}
+
+static void
+update_context_references (UProfReport *report)
+{
+  UProfReportPrivate *priv = report->priv;
+  GList *l;
+  GList *contexts = NULL;
+  GList *references = NULL;
+
+  /* Get a list of all contexts associated with this report */
+  for (l = priv->top_contexts; l; l = l->next)
+    _uprof_context_for_self_and_links_recursive (l->data,
+                                                 add_context_to_list_cb,
+                                                 &contexts);
+
+  /* Move references still needed to the new references list and
+   * free the others. (Delete links from contexts as they are
+   * accounted for) */
+  for (l = priv->context_references; l; l = l->next)
+    {
+      UProfReportContextReference *ref = l->data;
+      GList *link;
+
+      link = g_list_find (contexts, ref->context);
+      if (link)
+        {
+          references = g_list_prepend (references, ref->context);
+          contexts = g_list_delete_link (contexts, link);
+        }
+      else
+        {
+          int id = ref->trace_messages_callback_id;
+
+          _uprof_context_remove_trace_message_callback (ref->context, id);
+          uprof_context_unref (ref->context);
+
+          g_slice_free (UProfReportContextReference, ref);
+        }
+    }
+
+  /* Create references for newly found contexts */
+  for (l = contexts; l; l = l->next)
+    {
+      UProfContext *context = l->data;
+      UProfReportContextReference *ref =
+        g_slice_new (UProfReportContextReference);
+
+      ref->context = uprof_context_ref (context);
+      /* This back reference is just for the convenience of being able to
+       * pass a ref as the private data for our trace message callback... */
+      ref->report = report;
+      ref->tracing_enabled = 0;
+      ref->trace_messages_callback_id =
+        _uprof_context_add_trace_message_callback (context,
+                                                   context_trace_message_cb,
+                                                   ref);
+
+      references = g_list_prepend (references, ref);
+    }
+
+  g_list_free (contexts);
+
+  priv->context_references = references;
+}
+
 void
 uprof_report_add_context (UProfReport *report,
                           UProfContext *context)
 {
   UProfReportPrivate *priv = report->priv;
-  UProfReportContextReference *ref = g_slice_new (UProfReportContextReference);
-
-  ref->context = uprof_context_ref (context);
-  /* This back reference is just for the convenience of being able to
-   * pass a ref as the private data for our trace message callback... */
-  ref->report = report;
-  ref->tracing_enabled = 0;
-  ref->trace_messages_callback_id =
-    _uprof_context_add_trace_message_callback (context,
-                                               context_trace_message_cb,
-                                               ref);
-
-  priv->contexts = g_list_prepend (priv->contexts, ref);
+  priv->top_contexts =
+    g_list_prepend (priv->top_contexts, uprof_context_ref (context));
+  update_context_references (report);
 }
 
 void
@@ -396,18 +459,9 @@ uprof_report_remove_context (UProfReport *report,
                              UProfContext *context)
 {
   UProfReportPrivate *priv = report->priv;
-  GList *l;
 
-  for (l = priv->contexts; l; l = l->next)
-    {
-      UProfReportContextReference *ref = l->data;
-      int id = ref->trace_messages_callback_id;
-
-      _uprof_context_remove_trace_message_callback (ref->context, id);
-      uprof_context_unref (ref->context);
-      g_slice_free (UProfReportContextReference, ref);
-      priv->contexts = g_list_delete_link (priv->contexts, l);
-    }
+  priv->top_contexts = g_list_remove (priv->top_contexts, context);
+  update_context_references (report);
 }
 
 void
@@ -1668,11 +1722,8 @@ generate_uprof_report (UProfReport *report)
   GList *l;
   void *closure;
 
-  for (l = priv->contexts; l; l = l->next)
-    {
-      UProfReportContextReference *ref = l->data;
-      uprof_context_resolve_timer_heirachy (ref->context);
-    }
+  for (l = priv->top_contexts; l; l = l->next)
+    uprof_context_resolve_timer_heirachy (l->data);
 
   if (priv->init_callback &&
       !priv->init_callback (report,
@@ -1682,11 +1733,8 @@ generate_uprof_report (UProfReport *report)
 
   append_report_statistics (buf, report);
 
-  for (l = priv->contexts; l; l = l->next)
-    {
-      UProfReportContextReference *ref = l->data;
-      append_context_report (buf, report, ref->context);
-    }
+  for (l = priv->top_contexts; l; l = l->next)
+    append_context_report (buf, report, l->data);
 
   if (priv->fini_callback)
     priv->fini_callback (report,
@@ -1717,7 +1765,7 @@ _uprof_report_reset (UProfReport *report, GError **error)
   UProfReportPrivate *priv = report->priv;
   GList *l;
 
-  for (l = priv->contexts; l; l = l->next)
+  for (l = priv->context_references; l; l = l->next)
     {
       UProfReportContextReference *ref = l->data;
       _uprof_context_for_self_and_links_recursive (ref->context,
@@ -1736,34 +1784,44 @@ uprof_report_print (UProfReport *report)
   g_free (output);
 }
 
-UProfReportContextReference *
-find_context_reference (UProfReport *report, const char *name)
+typedef void (*UProfReportMatchingRefCallback) (
+                                            UProfReportContextReference *ref,
+                                            void *user_data);
+
+/* Either call the callback for one matching context or if context ==
+ * NULL call the callback for all contexts linked with this report. */
+gboolean
+for_matching_context_references (UProfReport *report,
+                                 const char *context,
+                                 UProfReportMatchingRefCallback callback,
+                                 void *user_data)
 {
   UProfReportPrivate *priv = report->priv;
   GList *l;
-  for (l = priv->contexts; l; l = l->next)
+  gboolean found = FALSE;
+
+  for (l = priv->context_references; l; l = l->next)
     {
       UProfReportContextReference *ref = l->data;
-      if (strcmp (ref->context->name, name) == 0)
-        return ref;
+      if (context == NULL ||
+          strcmp (context, ref->context->name) == 0)
+        {
+          callback (ref, user_data);
+
+          if (context != NULL)
+            found = TRUE;
+        }
     }
 
-  return NULL;
+  if (context != NULL && found == FALSE)
+    return FALSE;
+
+  return TRUE;
 }
 
 static void
-foreach_context (UProfReport *report,
-                 void (*callback) (UProfReportContextReference *ref))
-{
-  UProfReportPrivate *priv = report->priv;
-  GList *l;
-
-  for (l = priv->contexts; l; l = l->next)
-    callback (l->data);
-}
-
-static void
-inc_tracing_enabled_cb (UProfReportContextReference *ref)
+inc_tracing_enabled_cb (UProfReportContextReference *ref,
+                        void *user_data)
 {
   ref->tracing_enabled++;
 }
@@ -1774,42 +1832,31 @@ _uprof_report_enable_trace_messages (UProfReport *report,
                                      GError **error)
 {
   UProfReportPrivate *priv = report->priv;
-  UProfReportContextReference *ref;
 
   if (strcmp (context, "") == 0)
     context = NULL;
 
-  if (context)
+  if (!for_matching_context_references (report,
+                                        context,
+                                        inc_tracing_enabled_cb,
+                                        NULL))
     {
-      ref = find_context_reference (report, context);
-      if (ref)
-        {
-          ref->tracing_enabled++;
-          return TRUE;
-        }
-      else
-        {
-          g_set_error (error,
-                       UPROF_REPORT_ERROR,
-                       UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
-                       "Could not find a context named \"%s\" associated with "
-                       "report \"%s\"",
-                       context,
-                       priv->name);
-          return FALSE;
-        }
-    }
-  else
-    {
-      foreach_context (report, inc_tracing_enabled_cb);
-      return TRUE;
+      g_set_error (error,
+                   UPROF_REPORT_ERROR,
+                   UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
+                   "Could not find a context named \"%s\" associated with "
+                   "report \"%s\"",
+                   context,
+                   priv->name);
+      return FALSE;
     }
 
-  return FALSE;
+  return TRUE;
 }
 
 static void
-dec_tracing_enabled_cb (UProfReportContextReference *ref)
+dec_tracing_enabled_cb (UProfReportContextReference *ref,
+                        void *user_data)
 {
   g_return_if_fail (ref->tracing_enabled > 0);
   ref->tracing_enabled--;
@@ -1821,37 +1868,137 @@ _uprof_report_disable_trace_messages (UProfReport *report,
                                       GError **error)
 {
   UProfReportPrivate *priv = report->priv;
-  UProfReportContextReference *ref;
 
   if (strcmp (context, "") == 0)
     context = NULL;
 
-  if (context)
+  if (!for_matching_context_references (report,
+                                        context,
+                                        dec_tracing_enabled_cb,
+                                        NULL))
     {
-      ref = find_context_reference (report, context);
-      if (ref)
-        {
-          dec_tracing_enabled_cb (ref);
-          return TRUE;
-        }
-      else
-        {
-          g_set_error (error,
-                       UPROF_REPORT_ERROR,
-                       UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
-                       "Could not find a context named \"%s\" associated with "
-                       "report \"%s\"",
-                       context,
-                       priv->name);
-          return FALSE;
-        }
-    }
-  else
-    {
-      foreach_context (report, dec_tracing_enabled_cb);
-      return TRUE;
+      g_set_error (error,
+                   UPROF_REPORT_ERROR,
+                   UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
+                   "Could not find a context named \"%s\" associated with "
+                   "report \"%s\"",
+                   context,
+                   priv->name);
+      return FALSE;
     }
 
+  return TRUE;
+}
+
+static void
+append_context_options_cb (UProfReportContextReference *ref,
+                           void *user_data)
+{
+  _uprof_context_append_options_xml (ref->context, user_data);
+}
+
+gboolean
+_uprof_report_list_options (UProfReport *report,
+                            const char *context,
+                            char **options,
+                            GError **error)
+{
+  UProfReportPrivate *priv = report->priv;
+  GString *options_xml = g_string_new ("<options>\n");
+
+  if (strcmp (context, "") == 0)
+    context = NULL;
+
+  if (!for_matching_context_references (report,
+                                        context,
+                                        append_context_options_cb,
+                                        options_xml))
+    {
+      g_set_error (error,
+                   UPROF_REPORT_ERROR,
+                   UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
+                   "Could not find a context named \"%s\" associated with "
+                   "report \"%s\"",
+                   context,
+                   priv->name);
+      return FALSE;
+    }
+
+  g_string_append (options_xml, "</options>\n");
+  *options = g_string_free (options_xml, FALSE);
+
+  return TRUE;
+}
+
+gboolean
+_uprof_report_get_boolean_option (UProfReport *report,
+                                  const char *context,
+                                  const char *name,
+                                  gboolean *value,
+                                  GError **error)
+{
+  UProfReportPrivate *priv = report->priv;
+  GList *l;
+
+  if (context == NULL)
+    goto error;
+
+  for (l = priv->context_references; l; l = l->next)
+    {
+      UProfReportContextReference *ref = l->data;
+      if (strcmp (ref->context->name, context) == 0)
+        {
+          if (!_uprof_context_get_boolean_option (ref->context,
+                                                  name,
+                                                  value,
+                                                  error))
+            return FALSE;
+          else
+            return TRUE;
+        }
+    }
+
+error:
+  g_set_error (error,
+               UPROF_REPORT_ERROR,
+               UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
+               "Unknown context %s", context);
+  return FALSE;
+}
+
+gboolean
+_uprof_report_set_boolean_option (UProfReport *report,
+                                  const char *context,
+                                  const char *name,
+                                  gboolean value,
+                                  GError **error)
+{
+  UProfReportPrivate *priv = report->priv;
+  GList *l;
+
+  if (context == NULL)
+    goto error;
+
+  for (l = priv->context_references; l; l = l->next)
+    {
+      UProfReportContextReference *ref = l->data;
+      if (strcmp (ref->context->name, context) == 0)
+        {
+          if (!_uprof_context_set_boolean_option (ref->context,
+                                                  name,
+                                                  value,
+                                                  error))
+            return FALSE;
+          else
+            return TRUE;
+        }
+    }
+
+error:
+  g_set_error (error,
+               UPROF_REPORT_ERROR,
+               UPROF_REPORT_ERROR_UNKNOWN_CONTEXT,
+               "Unknown context %s", context);
   return FALSE;
 }
 
