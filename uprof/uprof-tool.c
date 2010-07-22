@@ -37,13 +37,6 @@
 #define UT_WARNING_COLOR 2
 #define UT_KEY_LABEL_COLOR 3
 
-typedef struct
-{
-  int key0;
-  int key1;
-  char *desc;
-} KeyHandler;
-
 typedef enum
 {
   UT_MESSAGE_EMPHASIS_0,
@@ -170,8 +163,26 @@ typedef enum
 static int current_page = UT_PAGE_TIMERS_COUNTERS;
 static int trace_message_filter_id;
 
-static KeyHandler keys[] = {
-  { 'q', 'Q', "Q - Quit" },
+static char **keys;
+
+static char *timers_counters_page_keys[] = {
+  "(Q) = Quit",
+  NULL
+};
+
+static char *options_page_keys[] = {
+  "(Q) = Quit",
+  "(Up) = Scroll",
+  "(Down) = Scroll",
+  "(Space) = Toggle",
+  NULL
+};
+
+static char *trace_page_keys[] = {
+  "(Q) = Quit",
+  "(Up) = Scroll",
+  "(Down) = Scroll",
+  NULL
 };
 
 static void queue_redraw (void);
@@ -525,9 +536,13 @@ keys_window_print (void)
   wattrset(keys_window, COLOR_PAIR (UT_KEY_LABEL_COLOR));
   wbkgd(keys_window, COLOR_PAIR (UT_KEY_LABEL_COLOR));
   werase(keys_window);
+
+  if (!keys)
+    return;
+
   wmove (keys_window, 0, 1);
-  for (i = 0; i < G_N_ELEMENTS (keys); i++)
-    wprintw (keys_window, "%s", keys[i].desc);
+  for (i = 0; keys[i]; i++)
+    wprintw (keys_window, "%s  ", keys[i]);
 }
 
 void
@@ -550,6 +565,7 @@ switch_to_timers_counters_page (void)
 {
   get_report_timeout_id =
     g_timeout_add_seconds (1, (GSourceFunc)get_report_cb, NULL);
+  keys = timers_counters_page_keys;
 }
 
 static void
@@ -617,6 +633,8 @@ switch_to_trace_page (void)
                   error->message);
       g_error_free (error);
     }
+
+  keys = trace_page_keys;
 }
 
 static void
@@ -1007,6 +1025,7 @@ static void
 switch_to_options_page (void)
 {
   update_option_groups ();
+  keys = options_page_keys;
 }
 
 static void
