@@ -143,6 +143,27 @@ lost_connection (UProfReportProxy *proxy, GError **error)
 }
 
 char *
+uprof_report_proxy_get_version (UProfReportProxy *proxy,
+                                GError **error)
+{
+  char *version;
+
+  if (lost_connection (proxy, error))
+    return NULL;
+
+  if (!dbus_g_proxy_call_with_timeout (proxy->dbus_g_proxy,
+                                       "GetVersion",
+                                       1000,
+                                       error,
+                                       G_TYPE_INVALID,
+                                       G_TYPE_STRING, &version,
+                                       G_TYPE_INVALID))
+    version = NULL;
+
+  return version;
+}
+
+char *
 uprof_report_proxy_get_text_report (UProfReportProxy *proxy,
                                     GError **error)
 {

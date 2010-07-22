@@ -40,6 +40,10 @@ void
 uprof_report_proxy_unref (UProfReportProxy *proxy);
 
 char *
+uprof_report_proxy_get_version (UProfReportProxy *proxy,
+                                GError **error);
+
+char *
 uprof_report_proxy_get_text_report (UProfReportProxy *proxy,
                                     GError **error);
 

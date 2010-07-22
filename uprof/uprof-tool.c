@@ -1252,8 +1252,11 @@ main (int argc, char **argv)
   GError *error = NULL;
   GIOChannel *stdin_io_channel;
   char *report_location;
+  char *version;
+  char *supported;
+  char *pos;
 
-  setlocale (LC_ALL,"");
+  setlocale (LC_ALL, "");
 
   uprof_init (&argc, &argv);
 
@@ -1323,8 +1326,7 @@ main (int argc, char **argv)
     }
 
   report_location = g_strdup_printf ("%s@%s", arg_report_name, arg_bus_name);
-  report_proxy = uprof_dbus_get_report_proxy (report_location,
-                                              &error);
+  report_proxy = uprof_dbus_get_report_proxy (report_location, &error);
   if (!report_proxy)
     {
       g_printerr ("Failed to create a proxy object for report "
@@ -1332,6 +1334,28 @@ main (int argc, char **argv)
                   arg_report_name, arg_bus_name,
                   error->message);
       g_error_free (error);
+      return 1;
+    }
+
+  version = uprof_report_proxy_get_version (report_proxy, &error);
+  if (!version)
+    {
+      g_printerr ("Failed to query version number of UProf "
+                  "report object: %s\n", error->message);
+      g_error_free (error);
+      return 1;
+    }
+
+  supported = strdup (VERSION);
+  pos = strchr (supported, '.');
+  pos = strchr (supported, '.');
+  *pos = '\0';
+
+  if (strncmp (version, supported, strlen (supported)) != 0)
+    {
+      g_printerr ("The specified UProf report object is using an "
+                  "unsupported protocol version \"%s\" where only "
+                  "\"%s.X\" is supported\n", version, supported);
       return 1;
     }
 

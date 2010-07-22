@@ -19,6 +19,8 @@
  * MA  02110-1301  USA
  */
 
+#include "config.h"
+
 #include "uprof.h"
 #include "uprof-private.h"
 #include "uprof-marshal.h"
@@ -2002,4 +2004,14 @@ error:
                "Unknown context %s", context);
   return FALSE;
 }
+
+gboolean
+_uprof_report_get_version (UProfReport *report,
+                           char **version_ret,
+                           GError **error)
+{
+  *version_ret = g_strdup (VERSION);
+  return TRUE;
+}
+
 

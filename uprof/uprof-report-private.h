@@ -61,4 +61,9 @@ _uprof_report_set_boolean_option (UProfReport *report,
                                   gboolean value,
                                   GError **error);
 
+gboolean
+_uprof_report_get_version (UProfReport *report,
+                           char **version_ret,
+                           GError **error);
+
 #endif /* _UPROF_REPORT_PRIVATE_H_ */
