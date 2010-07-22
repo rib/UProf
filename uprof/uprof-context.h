@@ -411,6 +411,7 @@ uprof_context_error_quark (void);
 
 void
 uprof_context_add_boolean_option (UProfContext *context,
+                                  const char *group,
                                   const char *name,
                                   const char *name_formatted,
                                   const char *description,

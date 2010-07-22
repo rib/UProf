@@ -42,6 +42,7 @@ typedef enum
 typedef struct
 {
   UProfContextOptionType type;
+  char *group;
   char *name;
   char *name_formatted;
   char *description;
@@ -165,7 +166,7 @@ typedef struct
 {
   GList *seen_contexts;
   UProfContextCallback callback;
-  gpointer user_data;
+  void *user_data;
 } ForContextAndLinksState;
 
 static void
@@ -190,7 +191,7 @@ for_self_and_links_recursive (UProfContext *context,
 void
 _uprof_context_for_self_and_links_recursive (UProfContext *context,
                                              UProfContextCallback callback,
-                                             gpointer user_data)
+                                             void *user_data)
 {
   ForContextAndLinksState state;
 
@@ -205,7 +206,7 @@ _uprof_context_for_self_and_links_recursive (UProfContext *context,
 
 static void
 dirty_resolved_state_cb (UProfContext *context,
-                         gpointer user_data)
+                         void *user_data)
 {
   context->resolved = FALSE;
 }
@@ -321,7 +322,7 @@ uprof_context_unlink (UProfContext *context, UProfContext *other)
 }
 
 static void
-copy_timers_list_cb (UProfContext *context, gpointer user_data)
+copy_timers_list_cb (UProfContext *context, void *user_data)
 {
   GList **all_timers = user_data;
   GList *context_timers;
@@ -345,7 +346,7 @@ void
 uprof_context_foreach_timer (UProfContext            *context,
                              GCompareDataFunc         sort_compare_func,
                              UProfTimerResultCallback callback,
-                             gpointer                 data)
+                             void *                data)
 {
   GList *l;
   GList *timers;
@@ -393,7 +394,7 @@ uprof_context_foreach_timer (UProfContext            *context,
 }
 
 static void
-copy_counters_list_cb (UProfContext *context, gpointer user_data)
+copy_counters_list_cb (UProfContext *context, void *user_data)
 {
   GList **all_counters = user_data;
   GList *context_counters = g_list_copy (context->counters);
@@ -407,7 +408,7 @@ void
 uprof_context_foreach_counter (UProfContext              *context,
                                GCompareDataFunc           sort_compare_func,
                                UProfCounterResultCallback callback,
-                               gpointer                   data)
+                               void *                  data)
 {
   GList *l;
   GList *counters;
@@ -525,7 +526,7 @@ uprof_context_add_report_message (UProfContext *context,
 void
 uprof_context_foreach_message (UProfContext *context,
                                UProfMessageCallback callback,
-                               gpointer user_data)
+                               void *user_data)
 {
   GList *l;
   for (l = context->report_messages; l; l = l->next)
@@ -622,6 +623,7 @@ uprof_context_trace_message (UProfContext *context,
 
 void
 uprof_context_add_boolean_option (UProfContext *context,
+                                  const char *group,
                                   const char *name,
                                   const char *name_formatted,
                                   const char *description,
@@ -631,7 +633,15 @@ uprof_context_add_boolean_option (UProfContext *context,
 {
   UProfContextOption *option = g_slice_new0 (UProfContextOption);
 
+  GList *l;
+  for (l = context->options; l; l = l->next)
+    {
+      UProfContextOption *option = l->data;
+      if (strcmp (option->name, name) == 0)
+        g_warning ("Duplicate boolean option %s", name);
+    }
   option->type = UPROF_CONTEXT_OPTION_TYPE_BOOLEAN;
+  option->group = g_strdup (group);
   option->name = g_strdup (name);
   option->name_formatted = g_strdup (name_formatted);
   option->description = g_strdup (description);
@@ -713,11 +723,10 @@ option_type_to_string (UProfContextOptionType type)
   return names[type];
 }
 
-static void
-append_options_cb (UProfContext *context,
-                   void *user_data)
+void
+_uprof_context_append_options_xml (UProfContext *context,
+                                   GString *options_xml)
 {
-  GString *options_xml = user_data;
   GList *l;
 
   for (l = context->options; l; l = l->next)
@@ -728,25 +737,18 @@ append_options_cb (UProfContext *context,
       g_string_append_printf (options_xml,
                               "<option context=\"%s\"\n"
                               "        type=\"%s\"\n"
+                              "        group=\"%s\"\n"
                               "        name=\"%s\"\n"
                               "        name_formatted=\"%s\"\n"
                               "        description=\"%s\"/>\n",
                               context->name,
                               option_type_to_string (option->type),
+                              option->group,
                               option->name,
                               name_formatted_escaped,
                               description_escaped);
       g_free (name_formatted_escaped);
       g_free (description_escaped);
     }
-}
-
-void
-_uprof_context_append_options_xml (UProfContext *context,
-                                   GString *options_xml)
-{
-  _uprof_context_for_self_and_links_recursive (context,
-                                               append_options_cb,
-                                               options_xml);
 }
 

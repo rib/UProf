@@ -283,9 +283,13 @@ option_tag_start_cb (GMarkupParseContext *context,
                      GError **error)
 {
   GList **options = user_data;
-  UProfReportProxyOption *option = g_slice_new (UProfReportProxyOption);
-
+  UProfReportProxyOption *option;
   int i;
+
+  if (strcmp (element_name, "option") != 0)
+    return;
+
+  option = g_slice_new (UProfReportProxyOption);
 
   for (i = 0; attribute_names[i]; i++)
     {
@@ -296,6 +300,8 @@ option_tag_start_cb (GMarkupParseContext *context,
           if (strcmp (attribute_values[i], "boolean") != 0)
             goto error;
         }
+      else if (strcmp (attribute_names[i], "group") == 0)
+        option->group = g_strdup (attribute_values[i]);
       else if (strcmp (attribute_names[i], "name") == 0)
         option->name = g_strdup (attribute_values[i]);
       else if (strcmp (attribute_names[i], "name_formatted") == 0)
@@ -340,8 +346,6 @@ uprof_report_proxy_foreach_option (UProfReportProxy *proxy,
   if (lost_connection (proxy, error))
     return FALSE;
 
-  g_print ("uprof_report_proxy_foreach_option\n");
-
   if (!dbus_g_proxy_call_with_timeout (proxy->dbus_g_proxy,
                                        "ListOptions",
                                        1000,
@@ -351,8 +355,6 @@ uprof_report_proxy_foreach_option (UProfReportProxy *proxy,
                                        G_TYPE_STRING, &options_xml,
                                        G_TYPE_INVALID))
     return FALSE;
-
-  g_print ("%s\n", options_xml);
 
   parser.start_element = option_tag_start_cb;
   parser.end_element = NULL;

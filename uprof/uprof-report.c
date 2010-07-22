@@ -1401,7 +1401,8 @@ uprof_context_resolve_timer_heirachy (UProfContext *context)
   if (context->resolved)
     return;
 
-  g_assert (context->root_timers == NULL);
+  if (context->root_timers)
+    g_list_free (context->root_timers);
 
   /* Use the parent names of timers to resolve the actual parent
    * child hierarchy (fill in timer .children, and .parent members) */

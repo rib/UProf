@@ -75,6 +75,7 @@ typedef struct
 {
   UProfReportProxyOptionType type;
   char *context;
+  char *group;
   char *name;
   char *name_formatted;
   char *description;
