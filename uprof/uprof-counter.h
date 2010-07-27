@@ -97,10 +97,10 @@ typedef struct _UProfCounter
  */
 #define UPROF_COUNTER(COUNTER_SYMBOL, NAME, DESCRIPTION, PRIV) \
   UProfCounter COUNTER_SYMBOL = { \
-    .name = NAME, \
-    .description = DESCRIPTION, \
-    .priv = (unsigned long)(PRIV), \
-    .state = NULL \
+    NAME, \
+    DESCRIPTION, \
+    (unsigned long)(PRIV), \
+    NULL \
   }
 
 /**

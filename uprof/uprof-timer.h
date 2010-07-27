@@ -115,11 +115,11 @@ typedef struct _UProfTimer
  */
 #define UPROF_TIMER(TIMER_SYMBOL, PARENT, NAME, DESCRIPTION, PRIV) \
   UProfTimer TIMER_SYMBOL = { \
-    .name = NAME, \
-    .description = DESCRIPTION, \
-    .parent_name = PARENT, \
-    .priv = (unsigned long)(PRIV), \
-    .state = NULL \
+    NAME, \
+    DESCRIPTION, \
+    PARENT, \
+    (unsigned long)(PRIV), \
+    NULL \
   }
 
 /**
