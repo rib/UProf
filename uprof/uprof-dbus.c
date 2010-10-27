@@ -125,6 +125,7 @@ uprof_dbus_list_reports (GError **error)
   if (!bus_names)
     return NULL;
 
+  n_names = 0;
   for (i = 0; bus_names[i]; i++)
     {
       ReportListEntry *report_list_entry;
