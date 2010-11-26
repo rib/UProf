@@ -275,7 +275,7 @@ uprof_report_finalize (GObject *object)
   g_list_foreach (priv->counter_attributes, (GFunc)free_attribute, NULL);
 
   contexts = g_list_copy (priv->top_contexts);
-  for (l = priv->top_contexts; l; l = l->next)
+  for (l = contexts; l; l = l->next)
     uprof_report_remove_context (report, l->data);
   g_list_free (contexts);
 
